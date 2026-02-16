@@ -1,8 +1,11 @@
 name: Build Android APK
 
 on:
+  # Trigger on push to EITHER main or master
   push:
-    branches: [ main ]
+    branches: [ "main", "master" ]
+  # Allow manual trigger via button
+  workflow_dispatch:
 
 jobs:
   build:
@@ -39,7 +42,9 @@ jobs:
       # Build the actual APK
       - name: Build Debug APK
         working-directory: ./client/android
-        run: ./gradlew assembleDebug
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
       # Upload the APK so you can download it
       - name: Upload APK
