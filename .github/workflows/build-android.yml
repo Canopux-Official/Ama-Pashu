@@ -1,8 +1,9 @@
 name: Build Android APK
 
 on:
-  push:
-    branches: [ "main", "master" ]
+  # We removed the 'push' section so it won't run automatically.
+  
+  # This enables the manual "Run workflow" button
   workflow_dispatch:
 
 jobs:
@@ -22,7 +23,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '21' # FIXED: Updated to Java 21
+          java-version: '21'
 
       - name: Install & Build Web
         working-directory: ./client
