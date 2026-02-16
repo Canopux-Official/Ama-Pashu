@@ -1,0 +1,49 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # Install dependencies and build the React App
+      - name: Install & Build Web
+        working-directory: ./client
+        run: |
+          npm ci
+          npm run build
+
+      # Add Capacitor & Sync
+      - name: Sync Capacitor
+        working-directory: ./client
+        run: |
+          npx cap sync android
+
+      # Build the actual APK
+      - name: Build Debug APK
+        working-directory: ./client/android
+        run: ./gradlew assembleDebug
+
+      # Upload the APK so you can download it
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: MoPashu-App
+          path: client/android/app/build/outputs/apk/debug/app-debug.apk

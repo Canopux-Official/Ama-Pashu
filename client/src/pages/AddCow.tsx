@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Container, Paper, Typography, Box, Stepper, Step, StepLabel,
     Button, TextField, MenuItem, Stack, IconButton, Divider, InputAdornment
@@ -8,6 +8,7 @@ import {
     QrCodeScanner, Edit
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useCamera } from '../hooks/useCamera'; // Import the hook
 
 // STEPS MAPPED TO YOUR WORKFLOW
 const steps = ['Basic Info', 'Lineage & Origin', 'Visual ID', 'Health & Stats', 'Review'];
@@ -32,11 +33,18 @@ interface CowFormData {
     growthStatus: string;
     healthStatus: string;
     productionStatus: string;
+    // Photos
+    muzzleImage: string;
+    leftImage: string;
+    rightImage: string;
+    backImage: string;
+    tailImage: string;
 }
 
 interface StepProps {
     formData: CowFormData;
     handleChange: (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => void;
+    handlePhotoCapture?: (field: keyof CowFormData, img: string) => void;
 }
 
 interface StepReviewProps {
@@ -133,43 +141,81 @@ const StepOrigin: React.FC<StepProps> = ({ formData, handleChange }) => (
 );
 
 // --- STEP 3: VISUAL ID (CAMERA) ---
-const PhotoBox = ({ label, required = false }: { label: string, required?: boolean }) => (
-    <Paper
-        elevation={0}
-        sx={{
-            bgcolor: '#F3F4F6', border: '2px dashed #CBD5E1', borderRadius: 3,
-            p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            height: required ? 160 : 110, cursor: 'pointer', position: 'relative'
-        }}
-    >
-        <CameraAlt color={required ? 'primary' : 'action'} sx={{ fontSize: 32, mb: 1 }} />
-        <Typography variant="caption" fontWeight={600} align="center">{label}</Typography>
-        {required && (
-            <Box sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'secondary.main', color: 'white', fontSize: 10, px: 1, borderBottomLeftRadius: 8 }}>
-                AI REQUIRED
-            </Box>
-        )}
-    </Paper>
-);
+const PhotoCaptureBox = ({ label, currentImage, required = false, onCapture }: { label: string, currentImage?: string, required?: boolean, onCapture: (img: string) => void }) => {
+    const { takePhoto } = useCamera();
 
-const StepVisual: React.FC = () => (
+    const handleClick = async () => {
+        const img = await takePhoto();
+        if (img) onCapture(img);
+    };
+
+    return (
+        <Paper
+            elevation={0}
+            onClick={handleClick}
+            sx={{
+                bgcolor: '#F3F4F6', border: '2px dashed #CBD5E1', borderRadius: 3,
+                p: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                height: required ? 160 : 110, cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                transition: '0.2s', '&:active': { transform: 'scale(0.98)' }
+            }}
+        >
+            {currentImage ? (
+                <img src={currentImage} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+                <>
+                    <CameraAlt color={required ? 'primary' : 'action'} sx={{ fontSize: 32, mb: 1 }} />
+                    <Typography variant="caption" fontWeight={600} align="center">{label}</Typography>
+                </>
+            )}
+
+            {required && !currentImage && (
+                <Box sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'secondary.main', color: 'white', fontSize: 10, px: 1, borderBottomLeftRadius: 8 }}>
+                    AI REQUIRED
+                </Box>
+            )}
+        </Paper>
+    );
+};
+
+const StepVisual: React.FC<StepProps> = ({ formData, handlePhotoCapture }) => (
     <Stack spacing={3}>
         <Typography variant="body2" color="text.secondary">
             Capture clear photos for the AI Model to identify this cow later.
         </Typography>
 
         <Typography variant="subtitle2" fontWeight="bold">1. PRIMARY IDENTIFIER</Typography>
-        <PhotoBox label="Muzzle (Nose Print)" required />
+        <PhotoCaptureBox
+            label="Muzzle (Nose Print)"
+            required
+            currentImage={formData.muzzleImage}
+            onCapture={(img) => handlePhotoCapture?.('muzzleImage', img)}
+        />
 
         <Typography variant="subtitle2" fontWeight="bold">2. BODY ANGLES</Typography>
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-            <PhotoBox label="Left Profile" />
-            <PhotoBox label="Right Profile" />
-            <PhotoBox label="Back View" />
-            <PhotoBox label="Tail / Udders" />
+            <PhotoCaptureBox
+                label="Left Profile"
+                currentImage={formData.leftImage}
+                onCapture={(img) => handlePhotoCapture?.('leftImage', img)}
+            />
+            <PhotoCaptureBox
+                label="Right Profile"
+                currentImage={formData.rightImage}
+                onCapture={(img) => handlePhotoCapture?.('rightImage', img)}
+            />
+            <PhotoCaptureBox
+                label="Back View"
+                currentImage={formData.backImage}
+                onCapture={(img) => handlePhotoCapture?.('backImage', img)}
+            />
+            <PhotoCaptureBox
+                label="Tail / Udders"
+                currentImage={formData.tailImage}
+                onCapture={(img) => handlePhotoCapture?.('tailImage', img)}
+            />
         </Box>
 
-        {/* 3D Camera Option from your image */}
         <Button variant="outlined" startIcon={<CameraAlt />}>
             Launch 3D Scanner (Optional)
         </Button>
@@ -220,6 +266,15 @@ const StepReview: React.FC<StepReviewProps> = ({ formData, setActiveStep }) => (
 
         <Paper elevation={0} sx={{ bgcolor: '#F9FAFB', p: 2, borderRadius: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="subtitle2" color="text.secondary">PHOTOS</Typography>
+                <IconButton size="small" onClick={() => setActiveStep(2)}><Edit fontSize="small" /></IconButton>
+            </Box>
+            <Typography variant="body2">Muzzle: {formData.muzzleImage ? 'Captured ✅' : 'Pending ❌'}</Typography>
+            <Typography variant="body2">Angles: {formData.leftImage ? 'Captured ✅' : 'Pending ❌'}</Typography>
+        </Paper>
+
+        <Paper elevation={0} sx={{ bgcolor: '#F9FAFB', p: 2, borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                 <Typography variant="subtitle2" color="text.secondary">STATS</Typography>
                 <IconButton size="small" onClick={() => setActiveStep(3)}><Edit fontSize="small" /></IconButton>
             </Box>
@@ -239,44 +294,19 @@ const AddCow: React.FC = () => {
     const navigate = useNavigate();
     const [activeStep, setActiveStep] = useState(0);
 
-    // --- FULL FORM STATE (Matches your Image & Schema) ---
     const [formData, setFormData] = useState<CowFormData>({
-        // Basic
-        tagNo: '',
-        name: '',
-        species: 'Cow',
-        breed: '',
-        sex: 'Female',
-        dob: '', // YYYY-MM-DD
-        ageMonths: '', // Auto-calculated
-
-        // Origin (Purchase/Home Born)
-        source: 'Home Born',
-        purchaseDate: '',
-        purchasePrice: '',
-
-        // Lineage
-        sireTag: '', // Father
-        damTag: '',  // Mother
-
-        // Physical Metrics from your Image
-        birthWeight: '',
-        motherWeightAtCalving: '',
-        bodyConditionScore: '',
-
-        // Current Status
-        currentWeight: '',
-        growthStatus: 'Optimum', // Poor/Optimum
-        healthStatus: 'Healthy', // Healthy/Underweight
-        productionStatus: 'Milking', // Milking/Dry/Pregnant/Heifer
+        tagNo: '', name: '', species: 'Cow', breed: '', sex: 'Female', dob: '', ageMonths: '',
+        source: 'Home Born', purchaseDate: '', purchasePrice: '', sireTag: '', damTag: '',
+        birthWeight: '', motherWeightAtCalving: '', bodyConditionScore: '',
+        currentWeight: '', growthStatus: 'Optimum', healthStatus: 'Healthy', productionStatus: 'Milking',
+        // Photos
+        muzzleImage: '', leftImage: '', rightImage: '', backImage: '', tailImage: ''
     });
 
     const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setFormData(prev => {
             const updated = { ...prev, [field]: value };
-
-            // Auto-Calculate Age when DOB changes
             if (field === 'dob') {
                 if (value) {
                     const birth = new Date(value);
@@ -291,83 +321,43 @@ const AddCow: React.FC = () => {
         });
     };
 
+    const handlePhotoCapture = (field: keyof CowFormData, img: string) => {
+        setFormData(prev => ({ ...prev, [field]: img }));
+    };
+
     const handleNext = () => setActiveStep((prev) => prev + 1);
     const handleBack = () => setActiveStep((prev) => prev - 1);
 
     return (
         <Container maxWidth="sm" sx={{ py: 2, pb: 15 }}>
-
-            {/* 1. Header */}
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <IconButton onClick={() => navigate('/')} sx={{ mr: 1, border: '1px solid #E5E7EB' }}>
                     <ArrowBack />
                 </IconButton>
-                <Typography variant="h6" fontWeight={800}>
-                    New Registration
-                </Typography>
+                <Typography variant="h6" fontWeight={800}>New Registration</Typography>
             </Box>
 
-            {/* 2. Stepper */}
             <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>
                 {steps.map((label) => (
-                    <Step key={label}>
-                        <StepLabel>{label}</StepLabel>
-                    </Step>
+                    <Step key={label}><StepLabel>{label}</StepLabel></Step>
                 ))}
             </Stepper>
 
-            {/* 3. Form Content */}
             <Paper elevation={0} sx={{ p: 2, border: '1px solid #E5E7EB', borderRadius: 3, minHeight: 400 }}>
                 {activeStep === 0 && <StepBasic formData={formData} handleChange={handleChange} />}
                 {activeStep === 1 && <StepOrigin formData={formData} handleChange={handleChange} />}
-                {activeStep === 2 && <StepVisual />}
+                {activeStep === 2 && <StepVisual formData={formData} handleChange={handleChange} handlePhotoCapture={handlePhotoCapture} />}
                 {activeStep === 3 && <StepStats formData={formData} handleChange={handleChange} />}
                 {activeStep === 4 && <StepReview formData={formData} setActiveStep={setActiveStep} />}
             </Paper>
 
-            {/* 4. FIXED FLOATING ACTION BAR (High Z-Index to stay on top) */}
-            <Paper
-                elevation={12}
-                sx={{
-                    position: 'fixed',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    p: 2,
-                    bgcolor: 'white',
-                    zIndex: 1300, // HIGHER than App Layout (1200)
-                    borderTop: '1px solid #E5E7EB',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                }}
-            >
-                <Button
-                    disabled={activeStep === 0}
-                    onClick={handleBack}
-                    sx={{ color: 'text.secondary', fontWeight: 600 }}
-                >
-                    Back
-                </Button>
-
-                {/* Progress Indicator Text */}
-                <Typography variant="caption" fontWeight="bold" color="text.secondary">
-                    Step {activeStep + 1} of {steps.length}
-                </Typography>
-
-                <Button
-                    variant="contained"
-                    onClick={activeStep === steps.length - 1 ? () => alert("Saved!") : handleNext}
-                    endIcon={activeStep === steps.length - 1 ? <CheckCircle /> : <ArrowForward />}
-                    sx={{
-                        px: 4, borderRadius: 4,
-                        boxShadow: '0 4px 12px rgba(46, 125, 50, 0.3)'
-                    }}
-                >
+            <Paper elevation={12} sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, p: 2, bgcolor: 'white', zIndex: 1300, borderTop: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Button disabled={activeStep === 0} onClick={handleBack} sx={{ color: 'text.secondary', fontWeight: 600 }}>Back</Button>
+                <Typography variant="caption" fontWeight="bold" color="text.secondary">Step {activeStep + 1} of {steps.length}</Typography>
+                <Button variant="contained" onClick={activeStep === steps.length - 1 ? () => alert("Saved!") : handleNext} endIcon={activeStep === steps.length - 1 ? <CheckCircle /> : <ArrowForward />} sx={{ px: 4, borderRadius: 4, boxShadow: '0 4px 12px rgba(46, 125, 50, 0.3)' }}>
                     {activeStep === steps.length - 1 ? 'Submit' : 'Next'}
                 </Button>
             </Paper>
-
         </Container>
     );
 };
