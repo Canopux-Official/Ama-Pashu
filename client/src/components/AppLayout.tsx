@@ -98,7 +98,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                     onChange={(_, newValue) => setNavValue(newValue)}
                 >
                     <BottomNavigationAction label="Home" onClick={() => navigate('/')} icon={<HomeIcon />} />
-                    <BottomNavigationAction label="My Cows" icon={<CowIcon />} />
+                    <BottomNavigationAction label="My Cows" onClick={() => navigate('/my-cows')} icon={<CowIcon />} />
 
                     {/* Scan Button */}
                     <BottomNavigationAction
@@ -116,7 +116,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                     />
 
                     <BottomNavigationAction label="Alerts" icon={<AlertIcon />} />
-                    <BottomNavigationAction label="Profile" icon={<ProfileIcon />} />
+                    <BottomNavigationAction label="Profile" onClick={() => navigate('/profile')} icon={<ProfileIcon />} />
                 </BottomNavigation>
             </Paper>
         </Box>
