@@ -16,13 +16,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22 # FIXED: Updated to Node 22 for Capacitor CLI
+          node-version: 22
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21' # FIXED: Updated to Java 21
 
       - name: Install & Build Web
         working-directory: ./client
