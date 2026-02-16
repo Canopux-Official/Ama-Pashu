@@ -1,35 +1,33 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
-
+// src/App.tsx
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import theme from './theme/theme';
+import AppLayout from './components/AppLayout';
+import Home from './pages/Home';
+import AddCow from './pages/AddCow'; // Import the new page
+import SearchCow from './pages/SearchCow';
+import CowProfile from './pages/CowProfile';
+import MyCows from './pages/MyCows';
+import UserProfile from './pages/UserProfile';
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <BrowserRouter>
+        <AppLayout>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/add" element={<AddCow />} />
+            <Route path="/search" element={<SearchCow />} />    {/* Add This */}
+            <Route path="/cow/:id" element={<CowProfile />} />
+            <Route path="/my-cows" element={<MyCows />} />
+            <Route path="/profile" element={<UserProfile />} />
+          </Routes>
+        </AppLayout>
+      </BrowserRouter>
+    </ThemeProvider>
+  );
 }
 
-export default App
+export default App;
