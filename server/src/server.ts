@@ -7,6 +7,8 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import authRoutes from './routes/auth';
 import cattleRoutes from './routes/cattle';
+import locationRoutes from './routes/location';
+import userRoutes from './routes/user';
 
 // Check required prod variables
 if (!process.env.JWT_SECRET || !process.env.MONGO_URI) {
@@ -54,6 +56,8 @@ connectDB();
 
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/cattle', cattleRoutes);
+app.use('/api/location', locationRoutes);
+app.use('/api/user', userRoutes);
 
 // GCP Healthcheck
 app.get('/health', (req, res) => {

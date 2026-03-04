@@ -689,7 +689,7 @@ const AddCow: React.FC = () => {
             </Box>
 
             {/* SCROLLABLE FORM BODY */}
-            <Box ref={scrollRef} sx={{ flexGrow: 1, overflowY: 'auto', p: 1, pb: 4 }}>
+            <Box ref={scrollRef} sx={{ flexGrow: 1, overflowY: 'auto', p: 1, pb: 'calc(env(safe-area-inset-bottom) + 32px)' }}>
                 <Container maxWidth="sm">
                     <Paper elevation={0} sx={{ p: 2.5, border: '1px solid #E5E7EB', borderRadius: 2, mb: 3, bgcolor: 'white' }}>
                         {activeStep === 0 && <StepBasic formData={formData} handleChange={handleChange} />}

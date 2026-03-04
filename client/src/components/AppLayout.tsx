@@ -2,18 +2,21 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     AppBar, Toolbar, Typography, Box, IconButton, BottomNavigation,
-    BottomNavigationAction, Paper, Avatar, Stack
+    BottomNavigationAction, Paper, Avatar, Stack, Drawer, List, ListItem,
+    ListItemButton, ListItemIcon, ListItemText, Divider
 } from '@mui/material';
 import {
     Home as HomeIcon, Search as SearchIcon, Pets as CowIcon,
     Person as ProfileIcon, Menu as MenuIcon, Notifications as AlertIcon,
-    CloudSync as CloudSyncIcon
+    CloudSync as CloudSyncIcon, AddCircle as AddCowIcon
 } from '@mui/icons-material';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Capacitor } from '@capacitor/core';
 import { syncManager } from '../utils/syncManager';
 import { Badge } from '@mui/material';
 import BrandingFooter from './BrandingFooter';
+import { useQuery } from '@tanstack/react-query';
+import { getUserProfileAPI } from '../apis/apis';
 
 interface AppLayoutProps {
     children: React.ReactNode;
@@ -21,9 +24,15 @@ interface AppLayoutProps {
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     const [pendingCount, setPendingCount] = useState(0);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
     const mainRef = useRef<HTMLDivElement>(null);
+
+    const { data: profileData } = useQuery({
+        queryKey: ['userProfile'],
+        queryFn: getUserProfileAPI
+    });
 
     // Scroll to top of main container on route change
     useEffect(() => {
@@ -79,8 +88,18 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             if (confirmLeave) {
                 navigate(path);
             }
+        } else if (location.pathname === '/user-profile' && (window as unknown as { isProfileEditing?: boolean }).isProfileEditing) {
+            const confirmLeave = window.confirm('You have unsaved changes. Are you sure you want to leave?');
+            if (confirmLeave) {
+                (window as unknown as { isProfileEditing?: boolean }).isProfileEditing = false;
+                navigate(path);
+            }
         } else {
-            navigate(path);
+            if (path === '/alerts') {
+                alert('Alerts coming soon!');
+            } else {
+                navigate(path);
+            }
         }
     };
 
@@ -99,7 +118,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             {/* 2. TOP APP BAR */}
             <AppBar position="static" elevation={0} sx={{ zIndex: 1100 }}>
                 <Toolbar>
-                    <IconButton edge="start" color="inherit" sx={{ mr: 2 }}>
+                    <IconButton edge="start" color="inherit" sx={{ mr: 2 }} onClick={() => setDrawerOpen(true)}>
                         <MenuIcon />
                     </IconButton>
 
@@ -122,9 +141,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                             />
                         </Box>
                         <Stack direction="column">
-                            <Typography variant="h6" sx={{ lineHeight: 1.2 }}>Mo Pashu</Typography>
-                            <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                                'My Herd Manager'
+                            <Typography variant="h6" sx={{ lineHeight: 1.1 }}>Mo Pashu</Typography>
+                            <Typography variant="caption" sx={{ opacity: 0.9, fontWeight: 500, fontSize: '0.65rem', mt: 0.5, bgcolor: 'rgba(255,255,255,0.2)', px: 0.8, py: 0.2, borderRadius: 1, display: 'inline-block', width: 'fit-content' }}>
+                                GOVT. OF ODISHA
                             </Typography>
                         </Stack>
                     </Stack>
@@ -135,12 +154,82 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                         </Badge>
                     </IconButton>
 
-                    <Avatar
-                        //src={ }
-                        sx={{ width: 32, height: 32, border: '2px solid rgba(255,255,255,0.8)' }}
-                    />
+                    <IconButton color="inherit" onClick={() => handleNavClick('/user-profile')} sx={{ p: 0, ml: 1 }}>
+                        <Avatar
+                            src={(profileData?.user?.profilePicture as string) || ''}
+                            sx={{ width: 32, height: 32, border: '2px solid rgba(255,255,255,0.8)' }}
+                        >
+                            {!profileData?.user?.profilePicture && <ProfileIcon fontSize="small" />}
+                        </Avatar>
+                    </IconButton>
                 </Toolbar >
             </AppBar >
+
+            {/* Navigation Drawer */}
+            <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+                <Box sx={{ width: 280 }} role="presentation">
+                    <Box sx={{ p: 3, pt: 'calc(env(safe-area-inset-top) + 24px)', bgcolor: 'primary.main', color: 'white', display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Box sx={{ bgcolor: 'white', borderRadius: '50%', p: 0.5, width: 48, height: 48, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                            <Box component="img" src="/logo.png" alt="Logo" sx={{ width: 40, height: 40, objectFit: 'contain' }} />
+                        </Box>
+                        <Box>
+                            <Typography variant="h6" fontWeight="bold" sx={{ lineHeight: 1.1 }}>Mo Pashu</Typography>
+                            <Typography variant="caption" sx={{ opacity: 0.9 }}>GOVT. OF ODISHA</Typography>
+                        </Box>
+                    </Box>
+                    <List sx={{ pt: 1 }}>
+                        <ListItem disablePadding>
+                            <ListItemButton onClick={() => { setDrawerOpen(false); handleNavClick('/'); }}>
+                                <ListItemIcon><HomeIcon color="primary" /></ListItemIcon>
+                                <ListItemText primary="Home" />
+                            </ListItemButton>
+                        </ListItem>
+                        <ListItem disablePadding>
+                            <ListItemButton onClick={() => { setDrawerOpen(false); handleNavClick('/my-cows'); }}>
+                                <ListItemIcon><CowIcon color="primary" /></ListItemIcon>
+                                <ListItemText primary="My Herd" />
+                            </ListItemButton>
+                        </ListItem>
+                        <ListItem disablePadding>
+                            <ListItemButton onClick={() => { setDrawerOpen(false); handleNavClick('/search'); }}>
+                                <ListItemIcon><SearchIcon color="primary" /></ListItemIcon>
+                                <ListItemText primary="Search Cattle" />
+                            </ListItemButton>
+                        </ListItem>
+                        <ListItem disablePadding>
+                            <ListItemButton onClick={() => { setDrawerOpen(false); handleNavClick('/add-cow'); }}>
+                                <ListItemIcon><AddCowIcon color="primary" /></ListItemIcon>
+                                <ListItemText primary="Register New Cow" />
+                            </ListItemButton>
+                        </ListItem>
+
+                        <Divider sx={{ my: 1 }} />
+
+                        <ListItem disablePadding>
+                            <ListItemButton onClick={() => { setDrawerOpen(false); handleNavClick('/offline-sync'); }}>
+                                <ListItemIcon>
+                                    <Badge badgeContent={pendingCount} color="error">
+                                        <CloudSyncIcon color="action" />
+                                    </Badge>
+                                </ListItemIcon>
+                                <ListItemText primary="Pending Syncs" />
+                            </ListItemButton>
+                        </ListItem>
+                        <ListItem disablePadding>
+                            <ListItemButton onClick={() => { setDrawerOpen(false); handleNavClick('/alerts'); }}>
+                                <ListItemIcon><AlertIcon color="action" /></ListItemIcon>
+                                <ListItemText primary="Notifications" />
+                            </ListItemButton>
+                        </ListItem>
+                        <ListItem disablePadding>
+                            <ListItemButton onClick={() => { setDrawerOpen(false); handleNavClick('/user-profile'); }}>
+                                <ListItemIcon><ProfileIcon color="action" /></ListItemIcon>
+                                <ListItemText primary="My Profile" />
+                            </ListItemButton>
+                        </ListItem>
+                    </List>
+                </Box>
+            </Drawer>
 
             {/* 3. MAIN CONTENT (Scrollable) */}
             <Box

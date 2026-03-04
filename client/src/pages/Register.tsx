@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Container,
     Box,
@@ -7,8 +7,9 @@ import {
     Button,
     CircularProgress,
     Alert,
+    MenuItem,
 } from '@mui/material';
-import { registerFarmerAPI } from '../apis/apis';
+import { registerFarmerAPI, getStatesAPI, getDistrictsAPI, getBlocksAPI, getVillagesAPI } from '../apis/apis';
 import { useNavigate } from 'react-router-dom';
 
 import BrandingFooter from '../components/BrandingFooter';
@@ -18,15 +19,76 @@ const Register: React.FC = () => {
     const [formData, setFormData] = useState({
         name: '',
         phone: '',
+        state: 'Odisha',
+        district: '',
+        block: '',
         village: '',
     });
+
+    const [states, setStates] = useState<string[]>([]);
+    const [districts, setDistricts] = useState<string[]>([]);
+    const [blocks, setBlocks] = useState<string[]>([]);
+    const [villages, setVillages] = useState<string[]>([]);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    useEffect(() => {
+        // Fetch states on mount
+        getStatesAPI().then(setStates).catch(console.error);
+    }, []);
+
+    useEffect(() => {
+        // Fetch districts when state changes
+        if (formData.state) {
+            getDistrictsAPI(formData.state).then(setDistricts).catch(console.error);
+        }
+    }, [formData.state]);
+
+    useEffect(() => {
+        // Fetch blocks when district changes
+        if (formData.district) {
+            getBlocksAPI(formData.district).then(setBlocks).catch(console.error);
+        }
+    }, [formData.district]);
+
+    useEffect(() => {
+        // Fetch villages when block changes
+        if (formData.block) {
+            getVillagesAPI(formData.block).then(setVillages).catch(console.error);
+        }
+    }, [formData.block]);
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
+        setFormData((prev) => {
+            const newData = { ...prev, [name]: value };
+            if (name === 'state') {
+                newData.district = '';
+                newData.block = '';
+                newData.village = '';
+            } else if (name === 'district') {
+                newData.block = '';
+                newData.village = '';
+            } else if (name === 'block') {
+                newData.village = '';
+            }
+            return newData;
+        });
+
+        // Also clear lists if value is empty
+        if (name === 'state' && !value) {
+            setDistricts([]);
+            setBlocks([]);
+            setVillages([]);
+        }
+        if (name === 'district' && !value) {
+            setBlocks([]);
+            setVillages([]);
+        }
+        if (name === 'block' && !value) {
+            setVillages([]);
+        }
     };
 
     const handleRegister = async (e: React.FormEvent) => {
@@ -49,10 +111,13 @@ const Register: React.FC = () => {
     };
 
     return (
-        <Container maxWidth="sm" sx={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', p: 3 }}>
+        <Container maxWidth="sm" sx={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', p: 3, pt: 'calc(env(safe-area-inset-top) + 24px)' }}>
             <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
                     <img src="/logo.png" alt="Gau-Netra Logo" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', letterSpacing: 1, mt: 1, textTransform: 'uppercase' }}>
+                        Govt. of Odisha
+                    </Typography>
                 </Box>
                 <Typography variant="h5" fontWeight="bold" gutterBottom textAlign="center">
                     Farmer Registration
@@ -83,15 +148,77 @@ const Register: React.FC = () => {
                         onChange={handleChange}
                         required
                     />
+
                     <TextField
-                        label="Village / Location"
+                        select
+                        label="State"
+                        name="state"
+                        variant="outlined"
+                        fullWidth
+                        value={formData.state}
+                        onChange={handleChange}
+                        required
+                    >
+                        {states.map((st) => (
+                            <MenuItem key={st} value={st} sx={{ py: 0.5, fontSize: '0.9rem' }}>
+                                {st}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+
+                    <TextField
+                        select
+                        label="District"
+                        name="district"
+                        variant="outlined"
+                        fullWidth
+                        value={formData.district}
+                        onChange={handleChange}
+                        required
+                        disabled={!formData.state || districts.length === 0}
+                    >
+                        {districts.map((dist) => (
+                            <MenuItem key={dist} value={dist} sx={{ py: 0.5, fontSize: '0.9rem' }}>
+                                {dist}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+
+                    <TextField
+                        select
+                        label="Block"
+                        name="block"
+                        variant="outlined"
+                        fullWidth
+                        value={formData.block}
+                        onChange={handleChange}
+                        required
+                        disabled={!formData.district || blocks.length === 0}
+                    >
+                        {blocks.map((blk) => (
+                            <MenuItem key={blk} value={blk} sx={{ py: 0.5, fontSize: '0.9rem' }}>
+                                {blk}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+
+                    <TextField
+                        select
+                        label="Village"
                         name="village"
                         variant="outlined"
                         fullWidth
                         value={formData.village}
                         onChange={handleChange}
                         required
-                    />
+                        disabled={!formData.block || villages.length === 0}
+                    >
+                        {villages.map((vil) => (
+                            <MenuItem key={vil} value={vil} sx={{ py: 0.5, fontSize: '0.9rem' }}>
+                                {vil}
+                            </MenuItem>
+                        ))}
+                    </TextField>
 
                     <Button
                         type="submit"

@@ -14,12 +14,15 @@ export interface IUser extends Document {
     location: {
         state: string;
         district: string;
+        block: string;
         village: string;
         pincode: string;
     };
     organization?: string;
     aadharHash?: string;
+    profilePicture?: string;
     cows: mongoose.Types.ObjectId[];
+    lastLogoutAt?: Date;
     createdAt: Date;
 }
 
@@ -41,12 +44,15 @@ const UserSchema = new Schema<IUser>({
     location: {
         state: { type: String, default: 'Odisha' },
         district: { type: String },
+        block: { type: String },
         village: { type: String },
         pincode: { type: String }
     },
     organization: String,
     aadharHash: String,
-    cows: [{ type: Schema.Types.ObjectId, ref: 'Cattle' }]
+    profilePicture: String,
+    cows: [{ type: Schema.Types.ObjectId, ref: 'Cattle' }],
+    lastLogoutAt: { type: Date }
 }, { timestamps: true });
 
 export const User = mongoose.model<IUser>('User', UserSchema);

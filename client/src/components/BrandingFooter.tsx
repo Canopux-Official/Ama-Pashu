@@ -26,8 +26,9 @@ const BrandingFooter: React.FC<BrandingFooterProps> = ({ sx }) => {
                 <img src={ocacLogo} alt="OCAC" style={{ height: 40, objectFit: 'contain' }} />
                 <img src={iiitLogo} alt="IIIT" style={{ height: 40, objectFit: 'contain' }} />
             </Stack>
-            <Typography variant="caption" fontWeight="bold" color="text.secondary">
-                Built by OCAC Bhubaneswar and IIIT-Bhubaneswar
+            <Typography variant="caption" fontWeight="bold" color="text.secondary" sx={{ textAlign: 'center' }}>
+                A Govt. of Odisha Initiative<br />
+                Built by OCAC & IIIT-Bhubaneswar
             </Typography>
         </Box>
     );

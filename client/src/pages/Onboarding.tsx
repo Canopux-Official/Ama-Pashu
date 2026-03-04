@@ -1,7 +1,6 @@
 import React from 'react';
 import { Box, Typography, Button, Container } from '@mui/material';
 import { Swiper, SwiperSlide } from 'swiper/react';
-import type { SwiperClass } from 'swiper/react';
 import { Pagination, Autoplay } from 'swiper/modules';
 import { useNavigate } from 'react-router-dom';
 import { Preferences } from '@capacitor/preferences';
@@ -14,7 +13,6 @@ import BrandingFooter from '../components/BrandingFooter';
 
 const Onboarding: React.FC = () => {
     const navigate = useNavigate();
-    const [swiperInstance, setSwiperInstance] = React.useState<SwiperClass | null>(null);
 
     const handleFinish = async () => {
         // Save that the user has seen the intro
@@ -30,17 +28,19 @@ const Onboarding: React.FC = () => {
                 display: 'flex',
                 flexDirection: 'column',
                 bgcolor: 'background.default',
-                pt: 4,
+                pt: 'calc(env(safe-area-inset-top) + 32px)',
                 pb: 4,
             }}
         >
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
                 <img src="/logo.png" alt="Gau-Netra Logo" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
+                <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', letterSpacing: 1, mt: 1, textTransform: 'uppercase' }}>
+                    Govt. of Odisha
+                </Typography>
             </Box>
 
             <Box sx={{ flexGrow: 1, width: '100%' }}>
                 <Swiper
-                    onSwiper={setSwiperInstance}
                     pagination={{ clickable: true }}
                     autoplay={{ delay: 3000, disableOnInteraction: false }}
                     modules={[Pagination, Autoplay]}
@@ -83,7 +83,7 @@ const Onboarding: React.FC = () => {
 
             <Box sx={{ display: 'flex', gap: 2, px: 2 }}>
                 <Button
-                    variant="outlined"
+                    variant="contained"
                     fullWidth
                     size="large"
                     onClick={handleFinish}
@@ -94,27 +94,7 @@ const Onboarding: React.FC = () => {
                         fontSize: '1.1rem',
                     }}
                 >
-                    Skip
-                </Button>
-                <Button
-                    variant="contained"
-                    fullWidth
-                    size="large"
-                    onClick={() => {
-                        if (swiperInstance && !swiperInstance.isEnd) {
-                            swiperInstance.slideNext();
-                        } else {
-                            handleFinish();
-                        }
-                    }}
-                    sx={{
-                        py: 2,
-                        borderRadius: 2,
-                        fontWeight: 'bold',
-                        fontSize: '1.1rem',
-                    }}
-                >
-                    Next
+                    Skip to Login
                 </Button>
             </Box>
 

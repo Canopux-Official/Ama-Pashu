@@ -4,7 +4,7 @@ import { Preferences } from '@capacitor/preferences';
 /**
  * Register a new farmer and save the JWT token
  */
-export const registerFarmerAPI = async (formData: { name: string; phone: string; village: string }) => {
+export const registerFarmerAPI = async (formData: { name: string; phone: string; village: string; state: string; district: string; pincode?: string }) => {
     try {
         const response = await axios.post(`${import.meta.env.VITE_SERVER_LINK}/api/auth/register`, formData);
 
@@ -26,6 +26,29 @@ export const registerFarmerAPI = async (formData: { name: string; phone: string;
         }
         throw error;
     }
+};
+
+/**
+ * Location APIs
+ */
+export const getStatesAPI = async () => {
+    const response = await axios.get(`${import.meta.env.VITE_SERVER_LINK}/api/location/states`);
+    return response.data;
+};
+
+export const getDistrictsAPI = async (state: string) => {
+    const response = await axios.get(`${import.meta.env.VITE_SERVER_LINK}/api/location/districts`, { params: { state } });
+    return response.data;
+};
+
+export const getBlocksAPI = async (district: string) => {
+    const response = await axios.get(`${import.meta.env.VITE_SERVER_LINK}/api/location/blocks`, { params: { district } });
+    return response.data;
+};
+
+export const getVillagesAPI = async (block: string) => {
+    const response = await axios.get(`${import.meta.env.VITE_SERVER_LINK}/api/location/villages`, { params: { block } });
+    return response.data;
 };
 
 /**
@@ -148,6 +171,81 @@ export const searchCowAPI = async (searchData: { faceImage: string; muzzleImage:
         if (!response.data.success) {
             throw new Error(response.data.message || 'Search failed');
         }
+
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.data?.message) {
+            throw new Error(error.response.data.message);
+        }
+        throw error;
+    }
+};
+
+/**
+ * User Profile APIs
+ */
+export const getUserProfileAPI = async () => {
+    try {
+        const { value: token } = await Preferences.get({ key: 'jwt_token' });
+        if (!token) throw new Error('Not authenticated');
+
+        const response = await axios.get(`${import.meta.env.VITE_SERVER_LINK}/api/user/profile`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to fetch user profile');
+        }
+
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.data?.message) {
+            throw new Error(error.response.data.message);
+        }
+        throw error;
+    }
+};
+
+export const updateUserProfileAPI = async (profileData: Record<string, unknown>) => {
+    try {
+        const { value: token } = await Preferences.get({ key: 'jwt_token' });
+        if (!token) throw new Error('Not authenticated');
+
+        const response = await axios.put(`${import.meta.env.VITE_SERVER_LINK}/api/user/profile`, profileData, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to update user profile');
+        }
+
+        // Optionally update locally cached user data if needed
+        await Preferences.set({
+            key: 'user_data', value: JSON.stringify({
+                id: response.data.user._id,
+                name: response.data.user.name,
+                role: response.data.user.role,
+                phone: response.data.user.contact?.phone
+            })
+        });
+
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.data?.message) {
+            throw new Error(error.response.data.message);
+        }
+        throw error;
+    }
+};
+
+export const logoutUserAPI = async () => {
+    try {
+        const { value: token } = await Preferences.get({ key: 'jwt_token' });
+        if (!token) return { success: true };
+
+        const response = await axios.post(`${import.meta.env.VITE_SERVER_LINK}/api/user/logout`, {}, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
 
         return response.data;
     } catch (error) {

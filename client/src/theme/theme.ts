@@ -49,6 +49,22 @@ const theme = createTheme({
                 },
             },
         },
+        MuiMenu: {
+            styleOverrides: {
+                list: {
+                    // Ensures dropdown menu items aren't obscured by bottom phone navigation bars
+                    paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
+                },
+            },
+        },
+        MuiDialog: {
+            styleOverrides: {
+                paper: {
+                    // Ensures Dialog actions don't overlap with safe area
+                    paddingBottom: 'env(safe-area-inset-bottom)',
+                },
+            },
+        },
     },
 });
 

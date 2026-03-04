@@ -66,10 +66,10 @@ const Home: React.FC = () => {
                 {/* 1. Greeting Section */}
                 <Box sx={{ mb: 3 }}>
                     <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                        Welcome back{farmerName ? `, ${farmerName}` : ''}!
+                        Welcome{farmerName ? `, ${farmerName}` : ''} !
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                        Here is your herd overview for today.
+                        Here is your herd overview.
                     </Typography>
                 </Box>
 
@@ -99,7 +99,7 @@ const Home: React.FC = () => {
                             py: 6,
                             px: 2,
                             bgcolor: 'background.paper',
-                            borderRadius: 4,
+                            borderRadius: '12px',
                             boxShadow: '0px 4px 12px rgba(0,0,0,0.05)',
                             border: '1px dashed',
                             borderColor: 'grey.300'
@@ -115,7 +115,7 @@ const Home: React.FC = () => {
                                 variant="contained"
                                 color="primary"
                                 onClick={() => navigate('/add-cow')}
-                                sx={{ borderRadius: 2, px: 4, py: 1.5, fontWeight: 'bold' }}
+                                sx={{ borderRadius: '12px', px: 4, py: 1.5, fontWeight: 'bold' }}
                             >
                                 + Register Cattle
                             </Button>
@@ -130,7 +130,7 @@ const Home: React.FC = () => {
                                         p: 2,
                                         mb: 2,
                                         bgcolor: 'background.paper',
-                                        borderRadius: 2,
+                                        borderRadius: '12px',
                                         boxShadow: '0px 2px 8px rgba(0,0,0,0.05)',
                                         cursor: 'pointer'
                                     }}
@@ -145,7 +145,7 @@ const Home: React.FC = () => {
                                 fullWidth
                                 variant="outlined"
                                 onClick={() => navigate('/my-cows')}
-                                sx={{ mt: 2, borderRadius: 2 }}
+                                sx={{ mt: 2, borderRadius: '12px' }}
                             >
                                 View All Cattle
                             </Button>
