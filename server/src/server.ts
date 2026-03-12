@@ -11,17 +11,17 @@ import cattleRoutes from './routes/cattle';
 import locationRoutes from './routes/location';
 import userRoutes from './routes/user';
 
-// Check required prod variables
+// 1. Check required prod variables
 if (!process.env.JWT_SECRET || !process.env.MONGO_URI) {
-  console.error("FATAL ERROR: Missing env secrets.");
+  console.error("FATAL ERROR: Missing env secrets. Check Render Environment Variables.");
   process.exit(1);
 }
+
 const app = express();
-// Enable proxy trust for GCP Load Balancing/Rate Limiting
 app.set('trust proxy', 1);
 const port = process.env.PORT || 2424;
 
-// Strict CORS Rules
+// 2. Strict CORS Rules
 const corsOptions = {
   origin: [
     'http://localhost',
@@ -33,24 +33,7 @@ const corsOptions = {
   credentials: true,
 };
 
-
-app.get('/api/health', (req, res) => {
-  res.status(200).send("Express Server is Awake and running!");
-});
-
-const DL_API_URL = process.env.DL_API_URL;
-
-setInterval(async () => {
-  try {
-    await axios.get(`${DL_API_URL}/docs`);
-    console.log("Internal Ping: Kept DL Server awake.");
-  } catch (error: any) {
-    console.error("Internal Ping Failed:", error.message);
-  }
-}, 10 * 60 * 1000);
-
-
-
+// 3. GLOBAL MIDDLEWARE (Must be at the top!)
 app.use(helmet());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -58,11 +41,28 @@ app.use(cors(corsOptions));
 
 // HTTP Request Logger
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} | Origin: ${req.headers.origin} | IP: ${req.ip}`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} | IP: ${req.ip}`);
   next();
 });
 
-// Auth Route Rate Limiter (100 req / 15min)
+// 4. THE DAISY-CHAIN PING SETUP
+app.get('/api/health', (req, res) => {
+  res.status(200).send("Express Server is Awake and running!");
+});
+
+const DL_API_URL = process.env.DL_API_URL;
+if (DL_API_URL) {
+  setInterval(async () => {
+    try {
+      await axios.get(`${DL_API_URL}/docs`);
+      console.log("Internal Ping: Kept DL Server awake.");
+    } catch (error: any) {
+      console.error("Internal Ping Failed:", error.message);
+    }
+  }, 10 * 60 * 1000);
+}
+
+// 5. RATE LIMITING & DATABASE
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -73,12 +73,12 @@ const authLimiter = rateLimit({
 
 connectDB();
 
+// 6. ROUTES
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/cattle', cattleRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api/user', userRoutes);
 
-// GCP Healthcheck
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
@@ -87,6 +87,7 @@ app.get("/", (req, res) => {
   res.send("Hello World! API running");
 });
 
+// 7. START SERVER
 app.listen(Number(port), "0.0.0.0", () => {
   console.log(`Server is running at http://0.0.0.0:${port}`);
 });
