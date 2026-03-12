@@ -1,9 +1,11 @@
+import os
 from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 from schemas import RegistrationRequest, SearchRequest
 from dl_pipeline import DLPipeline
 from vector_store import CattleVectorStore
-
+from dotenv import load_dotenv
+load_dotenv()
 dl = None
 db = None
 
@@ -12,7 +14,10 @@ async def lifespan(app: FastAPI):
     global dl, db
     print("Initializing AI components and Vector Database...")
     dl = DLPipeline(yolo_path="models/best.pt", siamese_path="models/siamese_resnet18_newdataset.pt")
-    db = CattleVectorStore(db_path="./chroma_data")
+    db = CattleVectorStore(
+    url=os.getenv("QDRANT_URL"), 
+    api_key=os.getenv("QDRANT_API_KEY")
+)
     print("System Ready.")
     yield
     print("Shutting down...")

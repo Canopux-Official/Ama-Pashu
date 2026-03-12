@@ -452,8 +452,8 @@ const ScanTab = () => {
                 setNotFoundReason('No matching cow found in the database.');
                 setNotFoundOpen(true);
             }
-        } catch (err: any) {
-            const msg = err.message || 'AI Verification failed. Please ensure clear images.';
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'AI Verification failed. Please ensure clear images.';
             setNotFoundReason(msg);
             setNotFoundOpen(true);
         } finally {

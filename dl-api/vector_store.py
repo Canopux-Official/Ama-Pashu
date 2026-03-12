@@ -1,38 +1,67 @@
-import chromadb
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
+import uuid
 from typing import List, Dict, Any
 
 class CattleVectorStore:
-    def __init__(self, db_path: str = "./chroma_data"):
-        # This creates a persistent database folder in your project
-        self.client = chromadb.PersistentClient(path=db_path)
-        self.collection = self.client.get_or_create_collection(
-            name="cattle_embeddings",
-            metadata={"hnsw:space": "cosine"} # Use cosine similarity
-        )
+    def __init__(self, url: str, api_key: str, vector_size: int = 512):
+        # Connect to Qdrant Cloud
+        self.client = QdrantClient(url=url, api_key=api_key)
+        self.collection_name = "cattle_embeddings"
+        
+        # Create collection if it doesn't exist
+        if not self.client.collection_exists(self.collection_name):
+            self.client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=models.VectorParams(
+                    size=vector_size, 
+                    distance=models.Distance.COSINE
+                ),
+            )
 
     def add_embedding(self, embedding: List[float], cow_id: str, farmer_id: str, source: str):
-        vector_id = f"{cow_id}_{source}" 
-        self.collection.add(
-            embeddings=[embedding],
-            metadatas=[{"cow_id": cow_id, "farmer_id": farmer_id, "source": source}],
-            ids=[vector_id]
+        # Qdrant requires UUIDs. We generate a consistent UUID from your unique string.
+        vector_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{cow_id}_{source}"))
+        
+        self.client.upsert(
+            collection_name=self.collection_name,
+            points=[
+                models.PointStruct(
+                    id=vector_id,
+                    vector=embedding,
+                    payload={"cow_id": cow_id, "farmer_id": farmer_id, "source": source}
+                )
+            ]
         )
 
     def search(self, embedding: List[float], user_id: str, role: str, top_k: int = 1) -> Dict[str, Any]:
         # Filter metadata based on role
-        where_filter = {"farmer_id": user_id} if role == "farmer" else None
+        query_filter = None
+        if role == "farmer":
+            query_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="farmer_id",
+                        match=models.MatchValue(value=user_id)
+                    )
+                ]
+            )
 
-        results = self.collection.query(
-            query_embeddings=[embedding],
-            n_results=top_k,
-            where=where_filter
+        results = self.client.search(
+            collection_name=self.collection_name,
+            query_vector=embedding,
+            query_filter=query_filter,
+            limit=top_k
         )
         
-        if not results['ids'] or len(results['ids'][0]) == 0:
+        if not results:
             return {"found": False, "message": "No matching cattle found in the specified database."}
             
+        best_match = results[0]
+        distance = 1.0 - best_match.score 
+        
         return {
             "found": True,
-            "cow_id": results['metadatas'][0][0]['cow_id'],
-            "distance": results['distances'][0][0]
+            "cow_id": best_match.payload['cow_id'],
+            "distance": distance
         }

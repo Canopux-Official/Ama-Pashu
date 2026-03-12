@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config();
+import axios from 'axios';
 import connectDB from "./config/db";
 import express from "express";
 import cors from 'cors';
@@ -31,6 +32,24 @@ const corsOptions = {
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true,
 };
+
+
+app.get('/api/health', (req, res) => {
+  res.status(200).send("Express Server is Awake and running!");
+});
+
+const DL_API_URL = process.env.DL_API_URL;
+
+setInterval(async () => {
+  try {
+    await axios.get(`${DL_API_URL}/docs`);
+    console.log("Internal Ping: Kept DL Server awake.");
+  } catch (error: any) {
+    console.error("Internal Ping Failed:", error.message);
+  }
+}, 10 * 60 * 1000);
+
+
 
 app.use(helmet());
 app.use(express.json({ limit: '50mb' }));
