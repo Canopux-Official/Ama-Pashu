@@ -51,3 +51,5 @@ venv
 chroma_data
 dist
 seed.ts
+wipe_db.py
+.env.production

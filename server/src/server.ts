@@ -23,12 +23,11 @@ const port = process.env.PORT || 2424;
 
 // 2. Strict CORS Rules
 const corsOptions = {
-  origin: [
-    'http://localhost',
-    'capacitor://localhost',
-    'https://localhost',
-    process.env.CLIENT_LINK || ''
-  ],
+  origin: function (origin: any, callback: any) {
+    console.log("Incoming Request Origin:", origin);
+    // Temporarily allow all origins to test the APK
+    callback(null, true);
+  },
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true,
 };
