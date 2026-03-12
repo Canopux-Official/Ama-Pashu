@@ -26,8 +26,8 @@ export const registerCow = async (req: Request, res: Response) => {
         } = authReq.body;
 
         // Basic validation
-        if (!tagNo || !species || !breed || !sex || !faceImage || !muzzleImage || !leftImage || !rightImage || !backImage || !tailImage) {
-            return res.status(400).json({ success: false, message: 'Missing required fields. All basic identity details and all 6 photos (Face, Muzzle, Left, Right, Back, Tail) are strictly required.' });
+        if (!tagNo || !species || !breed || !sex || !faceImage || !muzzleImage) {
+            return res.status(400).json({ success: false, message: 'Missing required fields. Face and Muzzle photos are strictly required for AI identification.' });
         }
 
         // Check duplicate tags
@@ -87,8 +87,17 @@ export const registerCow = async (req: Request, res: Response) => {
                 face_image: faceImage,
                 muzzle_image: muzzleImage
             });
-        } catch (dlError) {
-            console.error('Error calling DL API for embeddings:', dlError);
+        } catch (dlError: any) {
+            console.error('Error calling DL API for embeddings:', dlError?.response?.data || dlError.message);
+
+            // Clean up: delete the cow and remove from user if DL API fails
+            await Cattle.findByIdAndDelete(savedCow._id);
+            await User.findByIdAndUpdate(farmerId, {
+                $pull: { cows: savedCow._id }
+            });
+
+            const errorDetail = dlError?.response?.data?.detail || dlError?.response?.data?.message || 'AI Service could not process images. Please ensure muzzle and face are clearly visible.';
+            return res.status(400).json({ success: false, message: errorDetail });
         }
 
         res.status(201).json({
@@ -99,7 +108,7 @@ export const registerCow = async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error('Error registering cow:', error);
-        res.status(500).json({ success: false, message: 'Server Error' });
+        res.status(500).json({ success: false, message: error.message || 'Server Error' });
     }
 };
 

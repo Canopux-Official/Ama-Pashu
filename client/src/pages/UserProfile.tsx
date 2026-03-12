@@ -398,7 +398,7 @@ const UserProfile: React.FC = () => {
                 )}
 
                 <Typography variant="caption" display="block" textAlign="center" color="text.disabled" sx={{ mt: 4 }}>
-                    Gau-Netra © 2026 Odisha Govt.
+                    Ama Pashu © 2026 Odisha Govt.
                 </Typography>
 
                 {/* Logout Confirmation Dialog */}

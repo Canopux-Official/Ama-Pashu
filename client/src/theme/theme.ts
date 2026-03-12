@@ -5,15 +5,15 @@ const theme = createTheme({
     palette: {
         mode: 'light',
         primary: {
-            main: '#0A5C36', // Deep Forest Green (More professional than standard green)
-            light: '#34D399',
+            main: '#F97D09', // Vibrant Saffron / Orange
+            light: '#FFB067', // Lighter Saffron
             contrastText: '#ffffff',
         },
         secondary: {
-            main: '#F59E0B', // Professional Amber
+            main: '#046A38', // Deep Green (Complementary color from the party flag)
         },
         background: {
-            default: '#F4F7F4', // Faint, premium green tint
+            default: '#FFF9F2', // Faint, warm saffron tint
             paper: '#FFFFFF',
         },
         text: {

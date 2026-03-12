@@ -33,7 +33,7 @@ const Onboarding: React.FC = () => {
             }}
         >
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
-                <img src="/logo.png" alt="Gau-Netra Logo" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
+                <img src="/logo.png" alt="Ama Pashu Logo" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
                 <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', letterSpacing: 1, mt: 1, textTransform: 'uppercase' }}>
                     Govt. of Odisha
                 </Typography>
@@ -49,7 +49,7 @@ const Onboarding: React.FC = () => {
                     <SwiperSlide>
                         <Box sx={{ p: 2, textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                             <Typography variant="h4" fontWeight="bold" gutterBottom color="primary">
-                                Welcome to Gau-Netra
+                                Welcome to Ama Pashu
                             </Typography>
                             <Typography variant="body1" color="text.secondary">
                                 The smart way to manage your herd, track health, and stay connected with veterinary services.

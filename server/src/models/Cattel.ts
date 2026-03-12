@@ -71,10 +71,10 @@ const CattleSchema = new Schema<ICattle>({
     photos: {
         faceProfile: { type: String, required: true },
         muzzle: { type: String, required: true },
-        leftProfile: { type: String, required: true },
-        rightProfile: { type: String, required: true },
-        backView: { type: String, required: true },
-        tailView: { type: String, required: true }
+        leftProfile: { type: String },
+        rightProfile: { type: String },
+        backView: { type: String },
+        tailView: { type: String }
     },
 
     aiMetadata: {

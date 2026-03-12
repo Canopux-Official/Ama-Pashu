@@ -3,6 +3,7 @@ import {
     Box, Typography, Dialog, IconButton, Button, CircularProgress
 } from '@mui/material';
 import { Close, Cameraswitch, PhotoLibrary } from '@mui/icons-material';
+import { resizeImage } from '../utils/imageUtils';
 
 export type CameraGuidanceType = 'face' | 'muzzle' | 'left' | 'right' | 'back' | 'tail' | 'none';
 
@@ -128,7 +129,16 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(video, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
-            setCapturedImage(canvas.toDataURL('image/jpeg', 0.95));
+
+            // Resize image after capture to save memory and processing power
+            const rawImg = canvas.toDataURL('image/jpeg', 0.95);
+            resizeImage(rawImg).then(resized => {
+                setCapturedImage(resized);
+            }).catch(err => {
+                console.error('Resize failed, using original', err);
+                setCapturedImage(rawImg);
+            });
+
             stopCamera();
         }
     };
@@ -203,7 +213,17 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({
                                 const file = e.target.files?.[0];
                                 if (file) {
                                     const reader = new FileReader();
-                                    reader.onload = (ev) => { onCapture(ev.target?.result as string); onClose(); };
+                                    reader.onload = async (ev) => {
+                                        const result = ev.target?.result as string;
+                                        try {
+                                            const resized = await resizeImage(result);
+                                            onCapture(resized);
+                                        } catch (err) {
+                                            console.error('Gallery resize failed', err);
+                                            onCapture(result);
+                                        }
+                                        onClose();
+                                    };
                                     reader.readAsDataURL(file);
                                 }
                             }} />

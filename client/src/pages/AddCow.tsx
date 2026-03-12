@@ -16,6 +16,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { App as CapacitorApp } from '@capacitor/app';
 import { HTML5CameraDialog } from '../components/HTML5CameraDialog';
 import type { CameraGuidanceType } from '../components/HTML5CameraDialog';
+import { resizeImage } from '../utils/imageUtils';
 
 // STEPS MAPPED TO YOUR WORKFLOW
 const steps = ['Basic Info', 'Lineage & Origin', 'Visual ID', 'Health & Stats', 'Review'];
@@ -180,10 +181,16 @@ const SmartPhotoBox: React.FC<SmartPhotoBoxProps> = ({ label, currentImage, requ
         const file = e.target.files?.[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = async (event) => {
                 const result = event.target?.result;
                 if (typeof result === 'string') {
-                    onCapture(result);
+                    try {
+                        const resized = await resizeImage(result);
+                        onCapture(resized);
+                    } catch (err) {
+                        console.error('AddCow gallery resize failed', err);
+                        onCapture(result);
+                    }
                 }
             };
             reader.readAsDataURL(file);
@@ -311,7 +318,7 @@ const SmartPhotoBox: React.FC<SmartPhotoBoxProps> = ({ label, currentImage, requ
 const StepVisual: React.FC<StepProps> = ({ formData, handlePhotoCapture }) => (
     <Stack spacing={3}>
         <Typography variant="body2" color="text.secondary">
-            Capture clear photos for the AI Model to identify this cow later. All images are mandatory.
+            Capture clear photos for identification. Face and Muzzle are mandatory for AI.
         </Typography>
 
         <Typography variant="subtitle2" fontWeight="bold">1. PRIMARY IDENTIFIER</Typography>
@@ -336,28 +343,28 @@ const StepVisual: React.FC<StepProps> = ({ formData, handlePhotoCapture }) => (
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <SmartPhotoBox
                 label="Left Profile"
-                required={true}
+                required={false}
                 guidanceType="left"
                 currentImage={formData.leftImage}
                 onCapture={(img) => handlePhotoCapture?.('leftImage', img)}
             />
             <SmartPhotoBox
                 label="Right Profile"
-                required={true}
+                required={false}
                 guidanceType="right"
                 currentImage={formData.rightImage}
                 onCapture={(img) => handlePhotoCapture?.('rightImage', img)}
             />
             <SmartPhotoBox
                 label="Back View"
-                required={true}
+                required={false}
                 guidanceType="back"
                 currentImage={formData.backImage}
                 onCapture={(img) => handlePhotoCapture?.('backImage', img)}
             />
             <SmartPhotoBox
                 label="Tail / Udders"
-                required={true}
+                required={false}
                 guidanceType="tail"
                 currentImage={formData.tailImage}
                 onCapture={(img) => handlePhotoCapture?.('tailImage', img)}
@@ -457,7 +464,7 @@ const StepReview: React.FC<StepReviewProps> = ({ formData, setActiveStep }) => (
 
         <Box sx={{ textAlign: 'center', mt: 2 }}>
             <Typography variant="caption" color="text.secondary">
-                By clicking submit, this data and the metadata will be uploaded to the Gau-Netra AI Server.
+                By clicking submit, this data and the metadata will be uploaded to the Ama Pashu AI Server.
             </Typography>
         </Box>
     </Stack>
