@@ -22,14 +22,13 @@ app.set('trust proxy', 1);
 const port = process.env.PORT || 2424;
 
 // 2. Strict CORS Rules
+// Bulletproof Capacitor CORS Rules
 const corsOptions = {
-  origin: function (origin: any, callback: any) {
-    console.log("Incoming Request Origin:", origin);
-    // Temporarily allow all origins to test the APK
-    callback(null, true);
-  },
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  origin: true, // Dynamically mirrors the request origin
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 };
 
 // 3. GLOBAL MIDDLEWARE (Must be at the top!)
