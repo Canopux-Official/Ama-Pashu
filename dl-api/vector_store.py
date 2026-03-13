@@ -4,20 +4,42 @@ import uuid
 from typing import List, Dict, Any
 
 class CattleVectorStore:
-    def __init__(self, url: str, api_key: str, vector_size: int = 512):
+    def __init__(self, url: str, api_key: str, vector_size: int = 128):
         # Connect to Qdrant Cloud
         self.client = QdrantClient(url=url, api_key=api_key)
         self.collection_name = "cattle_embeddings"
         
-        # Create collection if it doesn't exist
-        if not self.client.collection_exists(self.collection_name):
-            self.client.create_collection(
-                collection_name=self.collection_name,
-                vectors_config=models.VectorParams(
-                    size=vector_size, 
-                    distance=models.Distance.COSINE
-                ),
-            )
+        # If collection exists but has wrong dimension, recreate it
+        if self.client.collection_exists(self.collection_name):
+            info = self.client.get_collection(self.collection_name)
+            existing_size = info.config.params.vectors.size
+            if existing_size != vector_size:
+                print(f"⚠️ Collection dimension mismatch: expected {vector_size}, got {existing_size}. Recreating...")
+                self.client.delete_collection(self.collection_name)
+                self._init_collection(vector_size)
+        else:
+            self._init_collection(vector_size)
+
+    def _init_collection(self, vector_size: int):
+        self.client.create_collection(
+            collection_name=self.collection_name,
+            vectors_config=models.VectorParams(
+                size=vector_size, 
+                distance=models.Distance.COSINE
+            ),
+        )
+        # Create payload index for farmer_id (required for filtering in search)
+        self.client.create_payload_index(
+            collection_name=self.collection_name,
+            field_name="farmer_id",
+            field_schema="keyword",
+        )
+        # Create payload index for cow_id for efficient lookup
+        self.client.create_payload_index(
+            collection_name=self.collection_name,
+            field_name="cow_id",
+            field_schema="keyword",
+        )
 
     def add_embedding(self, embedding: List[float], cow_id: str, farmer_id: str, source: str):
         # Qdrant requires UUIDs. We generate a consistent UUID from your unique string.
@@ -47,17 +69,20 @@ class CattleVectorStore:
                 ]
             )
 
-        results = self.client.search(
+        # Use the modern query_points API instead of the legacy search()
+        # which can have compatibility issues in some client versions.
+        response = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=embedding,
+            query=embedding,
             query_filter=query_filter,
             limit=top_k
         )
         
-        if not results:
+        if not response.points:
             return {"found": False, "message": "No matching cattle found in the specified database."}
             
-        best_match = results[0]
+        best_match = response.points[0]
+        # In query_points, the score is directly accessible
         distance = 1.0 - best_match.score 
         
         return {

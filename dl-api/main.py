@@ -85,3 +85,8 @@ async def search_cow(req: SearchRequest):
         raise HTTPException(status_code=404, detail="Cow not found (Similarity too low).")
         
     return {"cow_id": result["cow_id"], "distance": result["distance"]}
+
+@app.get("/health")
+async def health_check():
+    """Liveness check for Hugging Face Spaces."""
+    return {"status": "healthy", "model_loaded": dl is not None}
