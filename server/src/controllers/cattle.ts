@@ -22,11 +22,11 @@ export const registerCow = async (req: Request, res: Response) => {
             source, purchaseDate, purchasePrice, sireTag, damTag,
             birthWeight, motherWeightAtCalving, bodyConditionScore,
             currentWeight, growthStatus, healthStatus, productionStatus,
-            faceImage, muzzleImage, leftImage, rightImage, backImage, tailImage
+            faceImage, muzzleImage, leftImage, rightImage, backImage, tailImage, selfieImage
         } = authReq.body;
 
         // Basic validation
-        if (!tagNo || !species || !breed || !sex || !faceImage || !muzzleImage) {
+        if (!tagNo || !species || !breed || !sex || !faceImage || !muzzleImage || !selfieImage) {
             return res.status(400).json({ success: false, message: 'Missing required fields. Face and Muzzle photos are strictly required for AI identification.' });
         }
 
@@ -58,7 +58,8 @@ export const registerCow = async (req: Request, res: Response) => {
                 leftProfile: leftImage,
                 rightProfile: rightImage,
                 backView: backImage,
-                tailView: tailImage
+                tailView: tailImage,
+                selfie: selfieImage
             },
             currentStatus: productionStatus,
             lastWeight: currentWeight ? Number(currentWeight) : undefined,
@@ -81,12 +82,42 @@ export const registerCow = async (req: Request, res: Response) => {
         // Call DL API for vector embeddings
         try {
             const dlApiUrl = process.env.DL_MODEL_SERVER_LINK || 'http://localhost:8000';
-            await axios.post(`${dlApiUrl}/register`, {
+            const dlResponse = await axios.post(`${dlApiUrl}/register`, {
                 cow_id: savedCow._id.toString(),
                 farmer_id: farmerId,
                 face_image: faceImage,
                 muzzle_image: muzzleImage
             });
+
+            const { status, matched_cow_id } = dlResponse.data;
+
+            if (status === 'DUPLICATE') {
+                // If it's a double registration by the same farmer
+                await Cattle.findByIdAndDelete(savedCow._id);
+                await User.findByIdAndUpdate(farmerId, { $pull: { cows: savedCow._id } });
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Double Registration Detected: This cow is already registered in your herd.' 
+                });
+            }
+
+            if (status === 'DISPUTE') {
+                // Highly similar cow found in database registered by someone else
+                savedCow.isDispute = true;
+                await savedCow.save();
+
+                // Also mark the matched cow as disputed
+                if (matched_cow_id) {
+                    await Cattle.findByIdAndUpdate(matched_cow_id, { isDispute: true });
+                }
+
+                return res.status(201).json({
+                    success: true,
+                    message: 'Dispute alert: This cow is already registered by another farmer. Registration saved but marked as disputed.',
+                    data: savedCow
+                });
+            }
+
         } catch (dlError: any) {
             console.error('Error calling DL API for embeddings:', dlError?.response?.data || dlError.message);
 

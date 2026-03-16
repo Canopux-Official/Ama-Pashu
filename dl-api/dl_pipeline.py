@@ -7,9 +7,10 @@ from PIL import Image
 from torchvision import transforms
 from ultralytics import YOLO
 from siamese_model import SiameseNetwork
+from spoof_model import MuzzleSpoofDetector
 
 class DLPipeline:
-    def __init__(self, yolo_path: str, siamese_path: str):
+    def __init__(self, yolo_path: str, siamese_path: str, spoof_path: str = None):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Loading DL Models on {self.device.upper()}...")
         
@@ -18,6 +19,13 @@ class DLPipeline:
         self.siamese_model = SiameseNetwork().to(self.device)
         self.siamese_model.load_state_dict(torch.load(siamese_path, map_location=self.device))
         self.siamese_model.eval()
+        
+        # Load Spoof Model
+        self.spoof_model = None
+        if spoof_path:
+            self.spoof_model = MuzzleSpoofDetector().to(self.device)
+            self.spoof_model.load_state_dict(torch.load(spoof_path, map_location=self.device))
+            self.spoof_model.eval()
         
         self.transform = transforms.Compose([
             transforms.Resize((224, 224)),
@@ -66,3 +74,21 @@ class DLPipeline:
             embedding = self.siamese_model.forward_once(tensor_img)
             
         return embedding.cpu().numpy()[0].tolist()
+        
+    def is_spoof(self, image: np.ndarray) -> bool:
+        if self.spoof_model is None or image is None:
+            return False # Assume live if no model available
+            
+        img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(img_rgb)
+        
+        tensor_img = self.transform(img_pil).unsqueeze(0).to(self.device)
+        
+        with torch.no_grad():
+            output = self.spoof_model(tensor_img)
+            probs = torch.nn.functional.softmax(output, dim=1)
+            # Assuming class 0 = Live, class 1 = Spoof
+            # If probability of spoof > 0.5, return True
+            spoof_prob = probs[0][1].item()
+            
+        return spoof_prob > 0.5

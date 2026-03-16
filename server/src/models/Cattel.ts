@@ -29,6 +29,7 @@ export interface ICattle extends Document {
         rightProfile: string;
         backView: string;
         tailView: string;
+        selfie: string;
     };
     aiMetadata: {
         isRegistered: boolean;
@@ -40,6 +41,7 @@ export interface ICattle extends Document {
     currentStatus: 'Milking' | 'Dry' | 'Pregnant' | 'Heifer' | 'Calf';
     lastWeight?: number;
     isSick: boolean;
+    isDispute: boolean;
     healthStats?: {
         birthWeight?: number;
         motherWeightAtCalving?: number;
@@ -74,7 +76,8 @@ const CattleSchema = new Schema<ICattle>({
         leftProfile: { type: String },
         rightProfile: { type: String },
         backView: { type: String },
-        tailView: { type: String }
+        tailView: { type: String },
+        selfie: { type: String, required: true }
     },
 
     aiMetadata: {
@@ -90,6 +93,7 @@ const CattleSchema = new Schema<ICattle>({
     },
     lastWeight: Number,
     isSick: { type: Boolean, default: false },
+    isDispute: { type: Boolean, default: false },
     healthStats: {
         birthWeight: Number,
         motherWeightAtCalving: Number,

@@ -1,16 +1,19 @@
 // Update client/src/App.tsx
 import React, { useEffect, useState } from 'react';
+import { preloadMuzzleModel } from './utils/MuzzleModelService';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useOutlet } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
-import { CssBaseline, CircularProgress, Box } from '@mui/material';
+import { CssBaseline, CircularProgress, Box, Typography, Stack } from '@mui/material';
 import theme from './theme/theme';
 import { Preferences } from '@capacitor/preferences';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './queryClient';
 import PageTransition from './components/PageTransition';
 import { syncManager } from './utils/syncManager';
-
+import { getServerHealthAPI } from './apis/apis';
+import ocacLogo from '../src/assets/ocac.png';
+import iiitLogo from '../src/assets/iiit.png';
 // Import Pages
 import AppLayout from './components/AppLayout';
 import Home from './pages/Home';
@@ -23,6 +26,7 @@ import Onboarding from './pages/Onboarding';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import OfflineSync from './pages/OfflineSync';
+import Disputes from './pages/Disputes';
 
 const AnimatedOutlet = () => {
   const location = useLocation();
@@ -50,7 +54,7 @@ const MainLayout = ({ isFirstLaunch, isAuthenticated }: { isFirstLaunch: boolean
 
 const AnimatedRoutes: React.FC<{ isFirstLaunch: boolean; isAuthenticated: boolean }> = ({ isFirstLaunch, isAuthenticated }) => {
   const location = useLocation();
-  const isMainRoute = ['/', '/home', '/add-cow', '/search', '/my-cows', '/user-profile', '/offline-sync'].includes(location.pathname) || location.pathname.startsWith('/profile/');
+  const isMainRoute = ['/', '/home', '/add-cow', '/search', '/my-cows', '/user-profile', '/offline-sync', '/disputes'].includes(location.pathname) || location.pathname.startsWith('/profile/');
 
   return (
     <AnimatePresence mode="wait">
@@ -70,6 +74,7 @@ const AnimatedRoutes: React.FC<{ isFirstLaunch: boolean; isAuthenticated: boolea
           <Route path="/my-cows" element={<MyCows />} />
           <Route path="/user-profile" element={<UserProfile />} />
           <Route path="/offline-sync" element={<OfflineSync />} />
+          <Route path="/disputes" element={<Disputes />} />
         </Route>
 
         {/* Fallback route */}
@@ -82,7 +87,26 @@ const AnimatedRoutes: React.FC<{ isFirstLaunch: boolean; isAuthenticated: boolea
 const App: React.FC = () => {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isModelLoaded, setIsModelLoaded] = useState(false);
 
+  useEffect(() => {
+    // Yield to the browser render cycle first, then start heavy AI loading
+    const timer = setTimeout(async () => {
+      // Run model preloading and server health check in parallel
+      try {
+        await Promise.allSettled([
+          preloadMuzzleModel(),
+          getServerHealthAPI()
+        ]);
+        setIsModelLoaded(true);
+      } catch (err) {
+        console.error('Initialization error:', err);
+        setIsModelLoaded(true); // Continue anyway so we don't block app forever
+      }
+    }, 1000); // 1-second delay ensures your app's initial UI loads smoothly
+
+    return () => clearTimeout(timer);
+  }, []);
   useEffect(() => {
     const checkAppState = async () => {
       // Check onboarding
@@ -109,11 +133,116 @@ const App: React.FC = () => {
   }, []);
 
   // Show a loading spinner while checking local storage
-  if (isFirstLaunch === null || isAuthenticated === null) {
+  if (isFirstLaunch === null || isAuthenticated === null || !isModelLoaded) {
     return (
-      <Box sx={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'primary.main' }}>
-        <CircularProgress color="inherit" />
-      </Box>
+      <ThemeProvider theme={theme}>
+        <Box
+          sx={{
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: 'background.default', // ← #FFF9F2, NOT primary.main
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Ambient orbs */}
+          <Box sx={{ position: 'absolute', width: 300, height: 300, borderRadius: '50%', background: 'rgba(249,125,9,0.07)', top: -120, right: -80, filter: 'blur(50px)', pointerEvents: 'none' }} />
+          <Box sx={{ position: 'absolute', width: 200, height: 200, borderRadius: '50%', background: 'rgba(4,106,56,0.06)', bottom: -80, left: -60, filter: 'blur(50px)', pointerEvents: 'none' }} />
+
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                px: 3,
+                py: 4,
+              }}
+            >
+              {/* Ama Pashu Logo */}
+              <motion.div
+                animate={{ y: [0, -5, 0] }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <Box
+                  sx={{
+                    width: 84, height: 84, borderRadius: '20px',
+                    bgcolor: 'background.paper',
+                    boxShadow: '0px 4px 20px rgba(249,125,9,0.18), 0 0 0 1px rgba(249,125,9,0.12)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    mb: 2,
+                  }}
+                >
+                  <Box component="img" src="/logo.png" alt="Ama Pashu"
+                    sx={{ width: 56, height: 56, objectFit: 'contain', borderRadius: '10px' }} />
+                </Box>
+              </motion.div>
+
+              {/* Brand name */}
+              <Typography variant="h4" sx={{ color: 'text.primary', lineHeight: 1 }}>
+                Ama{' '}
+                <Box component="span" sx={{ color: 'primary.main' }}>Pashu</Box>
+              </Typography>
+
+              {/* Govt badge */}
+              <Box
+                sx={{
+                  display: 'inline-flex', alignItems: 'center', gap: 0.75,
+                  mt: 0.75,
+                  fontSize: '0.69rem', fontWeight: 600, letterSpacing: '0.3px',
+                  color: 'secondary.main',
+                  background: 'rgba(4,106,56,0.07)',
+                  border: '1px solid rgba(4,106,56,0.18)',
+                  borderRadius: '20px', px: 1.5, py: '4px',
+                }}
+              >
+                <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'secondary.main', flexShrink: 0 }} />
+                Govt. of Odisha
+              </Box>
+
+              {/* Accent line */}
+              <Box sx={{ width: 36, height: 3, borderRadius: 1, mt: 1.5, mb: 1.5, background: 'linear-gradient(90deg, #F97D09, #FFB067)' }} />
+
+              {/* Built by */}
+              <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, fontSize: '0.68rem' }}>
+                Built by
+              </Typography>
+
+              <Stack direction="row" spacing={2.5} alignItems="center">
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                  <Box component="img" src={ocacLogo} alt="OCAC"
+                    sx={{ height: 36, objectFit: 'contain' }} />
+                  <Typography variant="caption" sx={{ fontSize: '0.6rem', color: 'text.secondary', fontWeight: 600 }}>
+                    OCAC
+                  </Typography>
+                </Box>
+
+                <Box sx={{ width: '1px', height: 36, bgcolor: 'divider' }} />
+
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                  <Box component="img" src={iiitLogo} alt="IIIT Bhubaneswar"
+                    sx={{ height: 36, objectFit: 'contain' }} />
+                  <Typography variant="caption" sx={{ fontSize: '0.6rem', color: 'text.secondary', fontWeight: 600 }}>
+                    IIIT Bhubaneswar
+                  </Typography>
+                </Box>
+              </Stack>
+            </Box>
+          </motion.div>
+
+          {/* Loader */}
+          <Box sx={{ mt: 4 }}>
+            <CircularProgress size={28} thickness={4} sx={{ color: 'primary.main' }} />
+          </Box>
+        </Box>
+      </ThemeProvider>
     );
   }
 

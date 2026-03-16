@@ -3,12 +3,13 @@ import {
     Container, Paper, Typography, Box, Stepper, Step, StepButton,
     Button, TextField, MenuItem, Stack, IconButton, Divider, InputAdornment,
     Backdrop, CircularProgress, SwipeableDrawer, List, ListItem, ListItemButton,
-    ListItemIcon, ListItemText
+    ListItemIcon, ListItemText, Alert, AlertTitle
 } from '@mui/material';
 import {
     CameraAlt, ArrowForward, CheckCircle,
     QrCodeScanner, Edit, PhotoLibrary
 } from '@mui/icons-material';
+import WifiOffIcon from '@mui/icons-material/WifiOff';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { syncManager } from '../utils/syncManager';
 import { registerCowAPI } from '../apis/apis';
@@ -19,7 +20,7 @@ import type { CameraGuidanceType } from '../components/HTML5CameraDialog';
 import { resizeImage } from '../utils/imageUtils';
 
 // STEPS MAPPED TO YOUR WORKFLOW
-const steps = ['Basic Info', 'Lineage & Origin', 'Visual ID', 'Health & Stats', 'Review'];
+const steps = ['Basic Info', 'Lineage & Origin', 'Visual ID', 'Farmer KYC', 'Health & Stats', 'Review'];
 
 interface CowFormData {
     tagNo: string;
@@ -48,6 +49,7 @@ interface CowFormData {
     rightImage: string;
     backImage: string;
     tailImage: string;
+    selfieImage: string;
 }
 
 interface StepProps {
@@ -373,6 +375,25 @@ const StepVisual: React.FC<StepProps> = ({ formData, handlePhotoCapture }) => (
     </Stack>
 );
 
+const StepKYC: React.FC<StepProps> = ({ formData, handlePhotoCapture }) => (
+    <Stack spacing={3}>
+        <Typography variant="body2" color="text.secondary">
+            Take a selfie with the cow to verify farmer identity.
+        </Typography>
+
+        <Typography variant="subtitle2" fontWeight="bold">FARMER KYC</Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2 }}>
+            <SmartPhotoBox
+                label="Farmer Selfie with Cow"
+                required={true}
+                guidanceType="selfie"
+                currentImage={formData.selfieImage}
+                onCapture={(img) => handlePhotoCapture?.('selfieImage', img)}
+            />
+        </Box>
+    </Stack>
+);
+
 // --- STEP 4: HEALTH & STATS ---
 const StepStats: React.FC<StepProps> = ({ formData, handleChange }) => (
     <Stack spacing={3}>
@@ -452,8 +473,16 @@ const StepReview: React.FC<StepReviewProps> = ({ formData, setActiveStep }) => (
 
         <Paper elevation={0} sx={{ bgcolor: '#F9FAFB', p: 2, borderRadius: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="subtitle2" color="primary" fontWeight="bold">HEALTH & STATS</Typography>
+                <Typography variant="subtitle2" color="primary" fontWeight="bold">FARMER KYC</Typography>
                 <IconButton size="small" onClick={() => setActiveStep(3)}><Edit fontSize="small" /></IconButton>
+            </Box>
+            <Typography variant="body2"><b>Farmer Selfie:</b> {formData.selfieImage ? 'Captured ✅' : 'Pending ❌'}</Typography>
+        </Paper>
+
+        <Paper elevation={0} sx={{ bgcolor: '#F9FAFB', p: 2, borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="subtitle2" color="primary" fontWeight="bold">HEALTH & STATS</Typography>
+                <IconButton size="small" onClick={() => setActiveStep(4)}><Edit fontSize="small" /></IconButton>
             </Box>
             <Typography variant="body2"><b>Current Weight:</b> {formData.currentWeight || 'None'} kg</Typography>
             <Typography variant="body2"><b>Growth Status:</b> {formData.growthStatus}</Typography>
@@ -478,6 +507,31 @@ const AddCow: React.FC = () => {
     const [activeStep, setActiveStep] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [cooldownRemaining, setCooldownRemaining] = useState(0);
+    const apiAttemptsRef = useRef(0);
+
+    // 1-minute restriction logic
+    useEffect(() => {
+        const lastRegStr = localStorage.getItem('last_registration_time');
+        if (lastRegStr) {
+            const lastReg = parseInt(lastRegStr, 10);
+            const diffMs = Date.now() - lastReg;
+            if (diffMs < 60000) {
+                setCooldownRemaining(Math.ceil((60000 - diffMs) / 1000));
+                
+                const timer = setInterval(() => {
+                    setCooldownRemaining(prev => {
+                        if (prev <= 1) {
+                            clearInterval(timer);
+                            return 0;
+                        }
+                        return prev - 1;
+                    });
+                }, 1000);
+                return () => clearInterval(timer);
+            }
+        }
+    }, [location.key]); // Verify on mount/nav
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -502,7 +556,7 @@ const AddCow: React.FC = () => {
             birthWeight: '', motherWeightAtCalving: '', bodyConditionScore: '',
             currentWeight: '', growthStatus: 'Optimum', healthStatus: 'Healthy', productionStatus: 'Milking',
             // Photos
-            faceImage: '', muzzleImage: '', leftImage: '', rightImage: '', backImage: '', tailImage: ''
+            faceImage: '', muzzleImage: '', leftImage: '', rightImage: '', backImage: '', tailImage: '', selfieImage: ''
         }
     );
 
@@ -533,7 +587,10 @@ const AddCow: React.FC = () => {
             if (error.responseStatus && error.responseStatus >= 400 && error.responseStatus < 500) return false;
             return failureCount < 2; // Retry network or 5xx errors
         },
-        onSuccess: async () => {
+        onSuccess: async (response: { success: boolean; message?: string; data?: any }) => {
+            // Update local storage interval timer
+            localStorage.setItem('last_registration_time', Date.now().toString());
+
             // If this was an offline draft being edited, remove it from offline store now
             if (offlineDraft && offlineDraft.id) {
                 await syncManager.removePendingCow(offlineDraft.id);
@@ -541,7 +598,9 @@ const AddCow: React.FC = () => {
 
             // Invalidate the 'cows' query to instantly fetch updated lists on Home / MyCows
             queryClient.invalidateQueries({ queryKey: ['cows'] });
-            alert('Saved online successfully!');
+
+            const successMsg = response?.message || 'Saved online successfully!';
+            alert(successMsg);
             navigate('/home');
         },
         onError: async (err: Error & { responseStatus?: number }, variables) => {
@@ -550,7 +609,19 @@ const AddCow: React.FC = () => {
 
             if (isValidationError) {
                 console.warn('Validation error from server', err);
-                alert(`Validation Error: ${err.message}. Please correct the information and try again.`);
+                
+                // Track Spoof or AI API failures here allowing 10 attempts
+                const maxAttempts = 10;
+                apiAttemptsRef.current += 1;
+                const newCount = apiAttemptsRef.current;
+                
+                if (newCount >= maxAttempts) {
+                    alert(`You have failed AI validation ${maxAttempts} times. Registration blocked.`);
+                    navigate('/home');
+                } else {
+                    alert(`Validation Error: ${err.message}. Attempt ${newCount}/${maxAttempts}`);
+                }
+                
                 return; // Stop here, do not save locally, stay on the form
             }
 
@@ -565,6 +636,7 @@ const AddCow: React.FC = () => {
                 }
 
                 await syncManager.savePendingCow(variables);
+                localStorage.setItem('last_registration_time', Date.now().toString());
                 navigate('/home');
             } catch (localErr) {
                 console.error('Failed to save locally as fallback', localErr);
@@ -585,6 +657,7 @@ const AddCow: React.FC = () => {
                 }
 
                 await syncManager.savePendingCow(formData);
+                localStorage.setItem('last_registration_time', Date.now().toString());
                 alert('No internet connection. Saved locally! Will sync when online.');
                 navigate('/home');
             } catch (err) {
@@ -627,6 +700,18 @@ const AddCow: React.FC = () => {
         };
     }, [activeStep, handleCancelRequest]);
 
+    if (cooldownRemaining > 0) {
+        return (
+            <Box sx={{ p: 4, height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+                <Typography variant="h5" color="error" fontWeight="bold" gutterBottom>Slow Down</Typography>
+                <Typography align="center" variant="body1">
+                    Please wait another {cooldownRemaining} seconds before registering another cow.
+                </Typography>
+                <Button variant="outlined" sx={{ mt: 3 }} onClick={() => navigate('/home')}>Go Back</Button>
+            </Box>
+        );
+    }
+
     return (
         <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
             <Backdrop
@@ -651,8 +736,20 @@ const AddCow: React.FC = () => {
                         <Typography variant="subtitle1" fontWeight={800}>New Registration</Typography>
                     </Box>
 
-                    {/* FIXED STEPPER */}
-                    <Stepper nonLinear activeStep={activeStep} alternativeLabel sx={{ mb: 0.5 }}>
+                    {/* Offline Awareness Notice */}
+            {!navigator.onLine && (
+                <Alert 
+                    severity="warning" 
+                    icon={<WifiOffIcon />}
+                    sx={{ mb: 2, borderRadius: '12px' }}
+                >
+                    <AlertTitle sx={{ fontWeight: 'bold' }}>Offline Mode</AlertTitle>
+                    You are offline. Registration will be saved locally and sync automatically when internet is restored.
+                </Alert>
+            )}
+
+            {/* FIXED STEPPER */}
+            <Stepper nonLinear activeStep={activeStep} alternativeLabel sx={{ mb: 0.5 }}>
                         {steps.map((label, index) => (
                             <Step key={label} completed={activeStep > index}>
                                 <StepButton
@@ -702,8 +799,9 @@ const AddCow: React.FC = () => {
                         {activeStep === 0 && <StepBasic formData={formData} handleChange={handleChange} />}
                         {activeStep === 1 && <StepOrigin formData={formData} handleChange={handleChange} />}
                         {activeStep === 2 && <StepVisual formData={formData} handleChange={handleChange} handlePhotoCapture={handlePhotoCapture} />}
-                        {activeStep === 3 && <StepStats formData={formData} handleChange={handleChange} />}
-                        {activeStep === 4 && <StepReview formData={formData} setActiveStep={setActiveStep} />}
+                        {activeStep === 3 && <StepKYC formData={formData} handleChange={handleChange} handlePhotoCapture={handlePhotoCapture} />}
+                        {activeStep === 4 && <StepStats formData={formData} handleChange={handleChange} />}
+                        {activeStep === 5 && <StepReview formData={formData} setActiveStep={setActiveStep} />}
                     </Paper>
 
                     {/* INLINE BOTTOM NAVIGATION */}

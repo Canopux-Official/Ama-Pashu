@@ -3,7 +3,7 @@ import { Preferences } from '@capacitor/preferences';
 
 /**
  * Register a new farmer and save the JWT token
- */
+//  */
 // const API_BASE = "https://gau-netra.onrender.com"
 const API_BASE = import.meta.env.VITE_SERVER_LINK;
 export const registerFarmerAPI = async (formData: { name: string; phone: string; village: string; state: string; district: string; pincode?: string }) => {
@@ -54,6 +54,18 @@ export const getVillagesAPI = async (block: string) => {
 };
 
 /**
+ * Check server connectivity
+ */
+export const getServerHealthAPI = async () => {
+    try {
+        await axios.get(`${API_BASE}/api/health`, { timeout: 5000 });
+        return { success: true, isOffline: false };
+    } catch {
+        return { success: false, isOffline: true };
+    }
+};
+
+/**
  * Fetch all cattle belonging to the logged-in farmer
  */
 export const getMyCattleAPI = async () => {
@@ -69,8 +81,21 @@ export const getMyCattleAPI = async () => {
             throw new Error(response.data.message || 'Failed to fetch cattle');
         }
 
-        return response.data;
+        // Cache the result for offline fallback
+        const data = { ...response.data, isOffline: false };
+        await Preferences.set({ key: 'cached_my_cattle', value: JSON.stringify(data) });
+
+        return data;
     } catch (error) {
+        // Fallback to cache on network failure
+        const { value: cached } = await Preferences.get({ key: 'cached_my_cattle' });
+        if (cached) {
+            console.warn('Network failed, falling back to cached cattle data.');
+            const cachedData = JSON.parse(cached);
+            return { ...cachedData, isOffline: true };
+        }
+
+
         if (axios.isAxiosError(error) && error.response?.data?.message) {
             throw new Error(error.response.data.message);
         }
