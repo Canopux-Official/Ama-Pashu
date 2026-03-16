@@ -1,0 +1,5 @@
+*.pth
+.env
+.venv
+__pycache__
+wipe_db.py
