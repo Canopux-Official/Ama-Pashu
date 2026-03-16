@@ -88,5 +88,6 @@ class CattleVectorStore:
         return {
             "found": True,
             "cow_id": best_match.payload['cow_id'],
+            "farmer_id": best_match.payload['farmer_id'],
             "distance": distance
         }

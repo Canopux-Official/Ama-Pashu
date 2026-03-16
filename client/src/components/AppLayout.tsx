@@ -8,7 +8,8 @@ import {
 import {
     Home as HomeIcon, Search as SearchIcon, Pets as CowIcon,
     Person as ProfileIcon, Menu as MenuIcon, Notifications as AlertIcon,
-    CloudSync as CloudSyncIcon, AddCircle as AddCowIcon
+    CloudSync as CloudSyncIcon, AddCircle as AddCowIcon,
+    WarningAmber
 } from '@mui/icons-material';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Capacitor } from '@capacitor/core';
@@ -194,6 +195,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                             <ListItemButton onClick={() => { setDrawerOpen(false); handleNavClick('/search'); }}>
                                 <ListItemIcon><SearchIcon color="primary" /></ListItemIcon>
                                 <ListItemText primary="Search Cattle" />
+                            </ListItemButton>
+                        </ListItem>
+                        <ListItem disablePadding>
+                            <ListItemButton onClick={() => { setDrawerOpen(false); handleNavClick('/disputes'); }}>
+                                <ListItemIcon><WarningAmber color="error" /></ListItemIcon>
+                                <ListItemText primary="Disputed Cattle" />
                             </ListItemButton>
                         </ListItem>
                         <ListItem disablePadding>
