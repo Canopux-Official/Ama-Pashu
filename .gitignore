@@ -54,3 +54,5 @@ seed.ts
 wipe_db.py
 .env.production
 .agents
+.venv
+wipe_db.ts
