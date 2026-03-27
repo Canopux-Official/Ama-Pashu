@@ -47,37 +47,58 @@ class DLPipeline:
         np_arr = np.frombuffer(response.content, np.uint8)
         return cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-    def crop_muzzle(self, image: np.ndarray) -> np.ndarray:
-        if image is None: return None
-        results = self.yolo_model.predict(source=image, imgsz=640, conf=0.25, device="cpu", verbose=False)
+    def crop_muzzles(self, image: np.ndarray, max_crops: int = 5, min_conf: float = 0.75) -> tuple[list[np.ndarray], float]:
+        if image is None: return [], 0.0
+        # Use a low threshold (0.2) to fetch weaker predictions so we can log the actual score instead of 0.0
+        results = self.yolo_model.predict(source=image, imgsz=640, conf=0.5, device=self.device, verbose=False)
         r = results[0]
         
         if r.boxes is None or len(r.boxes.xyxy) == 0:
-            return None
+            return [], 0.0
             
-        box = r.boxes.xyxy[0]
-        x1, y1, x2, y2 = map(int, box)
-        h, w = image.shape[:2]
-        
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(w, x2), min(h, y2)
-        
-        return image[y1:y2, x1:x2]
+        crops = []
+        max_conf = 0.0
+        # Support extracting multiple muzzles from a single image for robustness
+        for i, box in enumerate(r.boxes.xyxy[:max_crops]):
+            try:
+                conf = float(r.boxes.conf[i])
+                if conf > max_conf: max_conf = conf
+            except:
+                conf = 0.0
+                
+            # Only add to crops if it meets our strict acceptance threshold
+            if conf >= min_conf:
+                x1, y1, x2, y2 = map(int, box)
+                h, w = image.shape[:2]
+                
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(w, x2), min(h, y2)
+                
+                crops.append(image[y1:y2, x1:x2])
+            
+        return crops, max_conf
 
-    def get_embedding(self, cropped_image: np.ndarray) -> list:
-        img_rgb = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2RGB)
-        img_pil = Image.fromarray(img_rgb)
-        
-        tensor_img = self.transform(img_pil).unsqueeze(0).to(self.device)
+    def get_embeddings_batch(self, cropped_images: list[np.ndarray]) -> list[list[float]]:
+        if not cropped_images:
+            return []
+            
+        tensors = []
+        for img in cropped_images:
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img_pil = Image.fromarray(img_rgb)
+            tensors.append(self.transform(img_pil))
+            
+        # Batch inference: Stack all images into a single Tensor [N, C, H, W]
+        batch_tensor = torch.stack(tensors).to(self.device)
         
         with torch.no_grad():
-            embedding = self.siamese_model.forward_once(tensor_img)
+            embeddings = self.siamese_model.forward_once(batch_tensor)
             
-        return embedding.cpu().numpy()[0].tolist()
+        return embeddings.cpu().numpy().tolist()
         
-    def is_spoof(self, image: np.ndarray) -> bool:
+    def is_spoof(self, image: np.ndarray) -> tuple[bool, float]:
         if self.spoof_model is None or image is None:
-            return False # Assume live if no model available
+            return False, 0.0 # Assume live if no model available
             
         img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         img_pil = Image.fromarray(img_rgb)
@@ -90,5 +111,6 @@ class DLPipeline:
             # Assuming class 0 = Live, class 1 = Spoof
             # If probability of spoof > 0.5, return True
             spoof_prob = probs[0][1].item()
+            print(f"Spoof probability: {spoof_prob}")
             
-        return spoof_prob > 0.5
+        return spoof_prob > 0.3, spoof_prob

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Cattle } from '../models/Cattel';
 import { User } from '../models/User';
 import axios from 'axios';
+import { uploadImageToOCI, publishDlJob } from '../services/ociService';
 
 // Define the authenticated request type
 interface AuthRequest extends Request {
@@ -9,6 +10,11 @@ interface AuthRequest extends Request {
     body: any;
     params: any;
 }
+
+// In-memory store for recent rejection reasons to inform the frontend without permanently storing failed cows.
+// Entries map cowId -> status ('DUPLICATE', 'SPOOF_DETECTED', etc.)
+const recentRejections = new Map<string, string>();
+const REJECTION_TTL_MS = 10 * 60 * 1000; // Keep in memory for 10 minutes max
 
 // POST /api/cattle -> Register a new cow for a farmer
 export const registerCow = async (req: Request, res: Response) => {
@@ -22,12 +28,18 @@ export const registerCow = async (req: Request, res: Response) => {
             source, purchaseDate, purchasePrice, sireTag, damTag,
             birthWeight, motherWeightAtCalving, bodyConditionScore,
             currentWeight, growthStatus, healthStatus, productionStatus,
-            faceImage, muzzleImage, leftImage, rightImage, backImage, tailImage, selfieImage
+            lat, lng
         } = authReq.body;
 
+        const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
         // Basic validation
-        if (!tagNo || !species || !breed || !sex || !faceImage || !muzzleImage || !selfieImage) {
-            return res.status(400).json({ success: false, message: 'Missing required fields. Face and Muzzle photos are strictly required for AI identification.' });
+        if (!lat || !lng) {
+            return res.status(400).json({ success: false, message: 'GPS Location is mandatory to register a cow.' });
+        }
+
+        if (!tagNo || !species || !breed || !sex || !files?.faceImage?.[0] || !files?.muzzleImage?.[0] || !files?.selfieImage?.[0]) {
+            return res.status(400).json({ success: false, message: 'Missing required fields. Face, Muzzle, and Selfie photos are strictly required for AI identification.' });
         }
 
         // Check duplicate tags
@@ -35,6 +47,20 @@ export const registerCow = async (req: Request, res: Response) => {
         if (existingCow) {
             return res.status(400).json({ success: false, message: 'Cow with this tag number already exists' });
         }
+
+        const uploadFileIfPresent = async (fileArray: Express.Multer.File[] | undefined) => {
+            if (!fileArray || fileArray.length === 0) return '';
+            const file = fileArray[0];
+            return await uploadImageToOCI(file.buffer, file.originalname, file.mimetype);
+        };
+
+        const faceProfileOci = await uploadFileIfPresent(files.faceImage);
+        const muzzleOci = await uploadFileIfPresent(files.muzzleImage);
+        const leftProfileOci = await uploadFileIfPresent(files.leftImage);
+        const rightProfileOci = await uploadFileIfPresent(files.rightImage);
+        const backViewOci = await uploadFileIfPresent(files.backImage);
+        const tailViewOci = await uploadFileIfPresent(files.tailImage);
+        const selfieOci = await uploadFileIfPresent(files.selfieImage);
 
         const newCow = new Cattle({
             farmerId,
@@ -52,14 +78,22 @@ export const registerCow = async (req: Request, res: Response) => {
                 date: purchaseDate,
                 price: purchasePrice ? Number(purchasePrice) : undefined
             } : undefined,
+            location: {
+                lat: Number(lat),
+                lng: Number(lng)
+            },
             photos: {
-                faceProfile: faceImage,
-                muzzle: muzzleImage,
-                leftProfile: leftImage,
-                rightProfile: rightImage,
-                backView: backImage,
-                tailView: tailImage,
-                selfie: selfieImage
+                faceProfile: faceProfileOci,
+                muzzle: muzzleOci,
+                leftProfile: leftProfileOci,
+                rightProfile: rightProfileOci,
+                backView: backViewOci,
+                tailView: tailViewOci,
+                selfie: selfieOci
+            },
+            aiMetadata: {
+                isRegistered: false, // Will be updated to true by DL-API webhook
+                status: 'PENDING'
             },
             currentStatus: productionStatus,
             lastWeight: currentWeight ? Number(currentWeight) : undefined,
@@ -79,61 +113,29 @@ export const registerCow = async (req: Request, res: Response) => {
             $push: { cows: savedCow._id }
         });
 
-        // Call DL API for vector embeddings
+        // Call DL API asynchronously via OCI Queue
         try {
-            const dlApiUrl = process.env.DL_MODEL_SERVER_LINK || 'http://localhost:8000';
-            const dlResponse = await axios.post(`${dlApiUrl}/register`, {
+            await publishDlJob({
+                type: 'register',
                 cow_id: savedCow._id.toString(),
                 farmer_id: farmerId,
-                face_image: faceImage,
-                muzzle_image: muzzleImage
+                face_image_oci: faceProfileOci,
+                muzzle_image_oci: muzzleOci
             });
+        } catch (queueError: any) {
+            console.error('Error calling putting job into OCI Queue:', queueError.message);
 
-            const { status, matched_cow_id } = dlResponse.data;
-
-            if (status === 'DUPLICATE') {
-                // If it's a double registration by the same farmer
-                await Cattle.findByIdAndDelete(savedCow._id);
-                await User.findByIdAndUpdate(farmerId, { $pull: { cows: savedCow._id } });
-                return res.status(400).json({ 
-                    success: false, 
-                    message: 'Double Registration Detected: This cow is already registered in your herd.' 
-                });
-            }
-
-            if (status === 'DISPUTE') {
-                // Highly similar cow found in database registered by someone else
-                savedCow.isDispute = true;
-                await savedCow.save();
-
-                // Also mark the matched cow as disputed
-                if (matched_cow_id) {
-                    await Cattle.findByIdAndUpdate(matched_cow_id, { isDispute: true });
-                }
-
-                return res.status(201).json({
-                    success: true,
-                    message: 'Dispute alert: This cow is already registered by another farmer. Registration saved but marked as disputed.',
-                    data: savedCow
-                });
-            }
-
-        } catch (dlError: any) {
-            console.error('Error calling DL API for embeddings:', dlError?.response?.data || dlError.message);
-
-            // Clean up: delete the cow and remove from user if DL API fails
+            // Clean up: delete the cow and remove from user if the message queue implies systemic failure
             await Cattle.findByIdAndDelete(savedCow._id);
             await User.findByIdAndUpdate(farmerId, {
                 $pull: { cows: savedCow._id }
             });
-
-            const errorDetail = dlError?.response?.data?.detail || dlError?.response?.data?.message || 'AI Service could not process images. Please ensure muzzle and face are clearly visible.';
-            return res.status(400).json({ success: false, message: errorDetail });
+            return res.status(500).json({ success: false, message: 'Could not enqueue registration process. Please try again.' });
         }
 
-        res.status(201).json({
+        res.status(202).json({
             success: true,
-            message: 'Cow registered successfully',
+            message: 'Cow registration accepted. It is currently being processed by our AI servers.',
             data: savedCow
         });
 
@@ -172,6 +174,36 @@ export const getCowProfile = async (req: Request, res: Response) => {
         const cow = await Cattle.findOne({ _id: authReq.params.id, farmerId: authReq.user.id });
 
         if (!cow) {
+            // Check if it was recently rejected and deleted
+            if (recentRejections.has(authReq.params.id)) {
+                const failureStatus = recentRejections.get(authReq.params.id)!;
+                let userMessage = `Registration failed due to: ${failureStatus}`;
+                
+                if (failureStatus === 'FACE_MUZZLE_MISMATCH') {
+                    userMessage = 'Registration failed: Muzzle in face and muzzle profile images do not match. Similarity is below 80%.';
+                } else if (failureStatus === 'SPOOF_DETECTED_BOTH') {
+                    userMessage = 'Registration failed: Spoofing detected in both Face and Muzzle images. Please capture real live photos.';
+                } else if (failureStatus === 'SPOOF_DETECTED_FACE') {
+                    userMessage = 'Registration failed: Spoofing detected in the Face profile image. Make sure it is a real photo, not a screen or print.';
+                } else if (failureStatus === 'SPOOF_DETECTED_MUZZLE') {
+                    userMessage = 'Registration failed: Spoofing detected in the Muzzle image. Make sure it is a real photo, not a screen or print.';
+                } else if (failureStatus === 'NO_MUZZLE_DETECTED_BOTH') {
+                    userMessage = 'Registration failed: Could not detect a muzzle in either the Face or Muzzle image. Please ensure they are clear and well lit.';
+                } else if (failureStatus === 'NO_MUZZLE_DETECTED_FACE_IMAGE') {
+                    userMessage = 'Registration failed: Could not detect the muzzle clearly in the Face profile image. Retake the Face profile.';
+                } else if (failureStatus === 'NO_MUZZLE_DETECTED_MUZZLE_IMAGE') {
+                    userMessage = 'Registration failed: Could not detect the muzzle clearly in the Muzzle profile image. Retake the Muzzle profile.';
+                } else if (failureStatus === 'DUPLICATE') {
+                    userMessage = 'Registration failed: This cow is already registered.';
+                }
+                
+                return res.status(400).json({ 
+                    success: false, 
+                    isRejected: true,
+                    status: failureStatus,
+                    message: userMessage
+                });
+            }
             return res.status(404).json({ success: false, message: 'Cow not found or unauthorized' });
         }
 
@@ -192,19 +224,23 @@ export const searchCow = async (req: Request, res: Response) => {
     try {
         if (!authReq.user) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
-        const { faceImage, muzzleImage } = authReq.body;
+        const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
-        if (!faceImage || !muzzleImage) {
+        if (!files?.faceImage?.[0] || !files?.muzzleImage?.[0]) {
             return res.status(400).json({ success: false, message: 'Both Face and Muzzle images are required for AI verification.' });
         }
 
         try {
+            // Upload to OCI first so DL-API can download them
+            const faceOci = await uploadImageToOCI(files.faceImage[0].buffer, files.faceImage[0].originalname, files.faceImage[0].mimetype);
+            const muzzleOci = await uploadImageToOCI(files.muzzleImage[0].buffer, files.muzzleImage[0].originalname, files.muzzleImage[0].mimetype);
+
             const dlApiUrl = process.env.DL_MODEL_SERVER_LINK || 'http://localhost:8000';
             const dlResponse = await axios.post(`${dlApiUrl}/search`, {
                 user_id: authReq.user.id,
                 role: authReq.user.role || 'farmer',
-                face_image: faceImage,
-                muzzle_image: muzzleImage
+                face_image_oci: faceOci,
+                muzzle_image_oci: muzzleOci
             });
 
             // If success, we'll get cow_id from DL API
@@ -233,6 +269,57 @@ export const searchCow = async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error('Error in search proxy:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
+// POST /api/cattle/webhook/dl-api-complete -> Webhook for DL-API
+export const handleDlApiWebhook = async (req: Request, res: Response) => {
+    try {
+        const { cow_id, farmer_id, status, matched_cow_id } = req.body;
+
+        if (!cow_id) {
+            return res.status(400).json({ success: false, message: 'Missing cow_id' });
+        }
+
+        const cow = await Cattle.findById(cow_id);
+        if (!cow) {
+            return res.status(404).json({ success: false, message: 'Cow not found' });
+        }
+
+        if (status === 'DUPLICATE') {
+            await Cattle.findByIdAndDelete(cow_id);
+            await User.findByIdAndUpdate(farmer_id, { $pull: { cows: cow_id } });
+            recentRejections.set(cow_id, status);
+            setTimeout(() => recentRejections.delete(cow_id), REJECTION_TTL_MS);
+            console.log(`[Webhook] Duplicate cow deleted for cow_id: ${cow_id}`);
+        } else if (status === 'DISPUTE') {
+            cow.isDispute = true;
+            cow.aiMetadata.isRegistered = true;
+            cow.aiMetadata.status = status;
+            await cow.save();
+
+            if (matched_cow_id) {
+                await Cattle.findByIdAndUpdate(matched_cow_id, { isDispute: true });
+            }
+            console.log(`[Webhook] Dispute marked for cow_id: ${cow_id} and matched_cow_id: ${matched_cow_id}`);
+        } else if (status === 'SUCCESS') {
+            cow.aiMetadata.isRegistered = true;
+            cow.aiMetadata.status = status;
+            await cow.save();
+            console.log(`[Webhook] Successfully registered cow_id: ${cow_id}`);
+        } else {
+            // FAILED, NO_MUZZLE_DETECTED, FAILED_MAX_RETRIES etc
+            await Cattle.findByIdAndDelete(cow_id);
+            await User.findByIdAndUpdate(farmer_id, { $pull: { cows: cow_id } });
+            recentRejections.set(cow_id, status);
+            setTimeout(() => recentRejections.delete(cow_id), REJECTION_TTL_MS);
+            console.log(`[Webhook] Failed AI processing, cow deleted for cow_id: ${cow_id}`);
+        }
+
+        res.status(200).json({ success: true });
+    } catch (error: any) {
+        console.error('Error in webhook handling:', error);
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };

@@ -17,23 +17,17 @@ COPY ./requirements.txt /code/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 RUN pip install uvicorn python-dotenv
 
-# Create a non-root user (Hugging Face requirement for some Docker spaces)
-RUN useradd -m -u 1000 user
-USER user
-ENV HOME=/home/user \
-    PATH=/home/user/.local/bin:$PATH
-WORKDIR $HOME/app
-
-# Copy the rest of the application code
-COPY --chown=user . $HOME/app
+# Set workspace and copy application code
+WORKDIR /code
+COPY . /code
 
 # Ensure LFS model files are resolved (not just pointers)
 RUN if head -c 20 models/best.pt | grep -q "version https"; then \
         echo "ERROR: models/best.pt is still a Git LFS pointer!" && exit 1; \
     fi
 
-# Hugging Face Spaces expose port 7860
-EXPOSE 7860
+# Standard port for FastAPI is 8000 (OCI load balancers can map this)
+EXPOSE 8000
 
 # Command to run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

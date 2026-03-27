@@ -3,22 +3,23 @@ import {
     Container, Paper, Typography, Box, Stepper, Step, StepButton,
     Button, TextField, MenuItem, Stack, IconButton, Divider, InputAdornment,
     Backdrop, CircularProgress, SwipeableDrawer, List, ListItem, ListItemButton,
-    ListItemIcon, ListItemText, Alert, AlertTitle
+    ListItemIcon, ListItemText, Alert, AlertTitle, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import {
     CameraAlt, ArrowForward, CheckCircle,
-    QrCodeScanner, Edit, PhotoLibrary
+    QrCodeScanner, Edit, PhotoLibrary, ErrorOutline
 } from '@mui/icons-material';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { syncManager } from '../utils/syncManager';
-import { registerCowAPI } from '../apis/apis';
+import { registerCowAPI, getCowProfileAPI } from '../apis/apis';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { App as CapacitorApp } from '@capacitor/app';
+import { Geolocation } from '@capacitor/geolocation';
 import { HTML5CameraDialog } from '../components/HTML5CameraDialog';
 import type { CameraGuidanceType } from '../components/HTML5CameraDialog';
-import { resizeImage } from '../utils/imageUtils';
-
+import { base64ToFile, compressImage } from '../utils/imageUtils';
+import { motion } from 'framer-motion';
 // STEPS MAPPED TO YOUR WORKFLOW
 const steps = ['Basic Info', 'Lineage & Origin', 'Visual ID', 'Farmer KYC', 'Health & Stats', 'Review'];
 
@@ -50,6 +51,8 @@ interface CowFormData {
     backImage: string;
     tailImage: string;
     selfieImage: string;
+    retryCount?: number;
+    id?: string;
 }
 
 interface StepProps {
@@ -178,7 +181,24 @@ const SmartPhotoBox: React.FC<SmartPhotoBoxProps> = ({ label, currentImage, requ
         setDrawerOpen(false);
         setTimeout(() => fileInputRef.current?.click(), 200);
     };
+    const processAndCapture = async (dataUrl: string) => {
+        try {
+            // Treat Face and Muzzle as high-priority biometrics
+            const isBiometric = guidanceType === 'muzzle' || guidanceType === 'face';
 
+            // Biometrics: 1280px max, 95% quality (high fidelity)
+            // General Photos (Tail, Side, Farmer Selfie): 800px max, 80% quality (high compression)
+            const targetSize = isBiometric ? 1280 : 800;
+            const targetQuality = isBiometric ? 0.95 : 0.80;
+
+            const compressedImage = await compressImage(dataUrl, targetSize, targetSize, targetQuality);
+            onCapture(compressedImage);
+        } catch (err) {
+            console.error('Image compression failed', err);
+            // Fallback to original image if compression fails for some reason
+            onCapture(dataUrl);
+        }
+    };
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
@@ -186,13 +206,7 @@ const SmartPhotoBox: React.FC<SmartPhotoBoxProps> = ({ label, currentImage, requ
             reader.onload = async (event) => {
                 const result = event.target?.result;
                 if (typeof result === 'string') {
-                    try {
-                        const resized = await resizeImage(result);
-                        onCapture(resized);
-                    } catch (err) {
-                        console.error('AddCow gallery resize failed', err);
-                        onCapture(result);
-                    }
+                    processAndCapture(result);
                 }
             };
             reader.readAsDataURL(file);
@@ -216,7 +230,10 @@ const SmartPhotoBox: React.FC<SmartPhotoBoxProps> = ({ label, currentImage, requ
             <HTML5CameraDialog
                 open={cameraOpen}
                 onClose={() => setCameraOpen(false)}
-                onCapture={(img) => { onCapture(img); setCameraOpen(false); }}
+                onCapture={(img) => {
+                    processAndCapture(img);
+                    setCameraOpen(false);
+                }}
                 guidanceType={guidanceType}
             />
 
@@ -510,6 +527,174 @@ const AddCow: React.FC = () => {
     const [cooldownRemaining, setCooldownRemaining] = useState(0);
     const apiAttemptsRef = useRef(0);
 
+    // Feedback State
+    const [feedback, setFeedback] = useState<{ type: 'ERROR' | 'OFFLINE_SAVED' | 'SERVER_ERROR_SAVED' | 'FATAL', title: string, message: string } | null>(null);
+    const [pollingCowId, setPollingCowId] = useState<string | null>(null);
+    const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
+
+    const addLog = (msg: string) => {
+        setTerminalLogs(prev => {
+            if (prev.includes(msg)) return prev;
+            return [...prev, msg];
+        });
+    };
+
+    useEffect(() => {
+        if (!pollingCowId) {
+            setTerminalLogs([]);
+            return;
+        }
+
+        addLog("> Initializing AI Pipeline...");
+
+        const interval = setInterval(async () => {
+            try {
+                const response = await getCowProfileAPI(pollingCowId);
+                const cow = response.data;
+                const aiStatus = cow?.aiMetadata?.status;
+
+                // Simulated progress updates based on time and status
+                if (aiStatus === 'PENDING') {
+                    addLog("> AI detecting muzzle in images...");
+                    setTimeout(() => addLog("> Processing biometric embeddings..."), 2000);
+                    setTimeout(() => addLog("> Verifying against duplicate database..."), 4000);
+                }
+
+                if (aiStatus === 'SUCCESS' || aiStatus === 'DISPUTE') {
+                    addLog("> Registration Verified Successfully! Finalizing...");
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        setPollingCowId(null);
+                        setIsSubmitting(false);
+                        alert(aiStatus === 'DISPUTE' ? 'Registered with a Dispute flag (similar cow exists).' : 'Cow registered and AI Verified successfully!');
+                        navigate('/home');
+                    }, 1000);
+                } else if (aiStatus && aiStatus !== 'PENDING') {
+                    // It's FAILED, NO_MUZZLE_DETECTED, DUPLICATE, FAILED_MAX_RETRIES, FACE_MUZZLE_MISMATCH, SPOOF_DETECTED
+                    addLog(`> AI REJECTED: ${aiStatus}`);
+                    clearInterval(interval);
+                    setPollingCowId(null);
+                    setIsSubmitting(false);
+
+                    let failureMsg = 'AI processing failed for an unknown reason.';
+                    if (aiStatus === 'DUPLICATE') failureMsg = 'This cow is already registered in the system (Duplicate detected by AI).';
+                    if (aiStatus === 'NO_MUZZLE_DETECTED_BOTH') failureMsg = 'No muzzle detected in either the Face or Muzzle images. Please ensure high-quality, clear photos.';
+                    if (aiStatus === 'NO_MUZZLE_DETECTED_FACE_IMAGE') failureMsg = 'No muzzle detected in the Face profile image. Retake the Face profile clearly.';
+                    if (aiStatus === 'NO_MUZZLE_DETECTED_MUZZLE_IMAGE') failureMsg = 'No muzzle detected in the Muzzle image. Ensure the muzzle takes up most of the frame natively.';
+                    if (aiStatus === 'SPOOF_DETECTED_BOTH') failureMsg = 'A spoofed or fake image (like a photo of a screen) was suspected in both images.';
+                    if (aiStatus === 'SPOOF_DETECTED_FACE') failureMsg = 'A spoofed image was suspected in the Face profile photo. Check your Face profile.';
+                    if (aiStatus === 'SPOOF_DETECTED_MUZZLE') failureMsg = 'A spoofed image was suspected in the Muzzle profile photo. Check your Muzzle profile.';
+                    if (aiStatus === 'FAILED_MAX_RETRIES') failureMsg = 'The AI service is currently unavailable or failed multiple times.';
+                    if (aiStatus === 'FACE_MUZZLE_MISMATCH') failureMsg = 'Muzzle in face and muzzle profile images do not match (Similarity below 80%).';
+
+                    const newRetryCount = (formData.retryCount || 0) + 1;
+                    const attemptsLeft = Math.max(0, 10 - newRetryCount);
+
+                    setFormData(prev => ({ ...prev, retryCount: newRetryCount }));
+
+                    if (formData.id) {
+                        try {
+                            await syncManager.savePendingCow({ ...formData, retryCount: newRetryCount, errorMessage: failureMsg, syncStatus: 'failed' });
+                        } catch (errLocal) {
+                            console.error('Failed to update local retry count', errLocal);
+                        }
+                    }
+
+                    if (newRetryCount >= 10) {
+                        if (formData.id) await syncManager.removePendingCow(formData.id);
+                        setFeedback({
+                            type: 'ERROR',
+                            title: 'Maximum Retries Reached',
+                            message: 'You have reached the maximum of 10 attempts. This registration has been discarded.'
+                        });
+                        setTimeout(() => navigate('/home'), 3500);
+                        return;
+                    }
+
+                    setFeedback({
+                        type: 'ERROR',
+                        title: 'AI Verification Rejected',
+                        message: `${failureMsg}\n\nYou have ${attemptsLeft} attempts left to fix the photos and retry.`
+                    });
+                }
+            } catch (err: unknown) {
+                const error = err as Error & { response?: { status: number } };
+                console.error("Polling error", error);
+
+                if (error.message && error.message.includes('Registration failed')) {
+                    addLog(`> AI Error: ${error.message}`);
+                    clearInterval(interval);
+                    setPollingCowId(null);
+                    setIsSubmitting(false);
+
+                    const newRetryCount = (formData.retryCount || 0) + 1;
+                    const attemptsLeft = Math.max(0, 10 - newRetryCount);
+                    setFormData(prev => ({ ...prev, retryCount: newRetryCount }));
+
+                    if (formData.id) {
+                        try {
+                            await syncManager.savePendingCow({ ...formData, retryCount: newRetryCount, errorMessage: error.message, syncStatus: 'failed' });
+                        } catch (err) {
+                            console.error("Failed to save pending cow", err);
+                        }
+                    }
+
+                    if (newRetryCount >= 10) {
+                        if (formData.id) await syncManager.removePendingCow(formData.id);
+                        setFeedback({
+                            type: 'ERROR',
+                            title: 'Maximum Retries Reached',
+                            message: 'You have reached the maximum of 10 attempts. This registration has been permanently discarded.'
+                        });
+                        setTimeout(() => navigate('/home'), 3500);
+                        return;
+                    }
+
+                    setFeedback({
+                        type: 'ERROR',
+                        title: 'AI Verification Rejected',
+                        message: `${error.message}\n\nYou have ${attemptsLeft} attempts left to fix the photos and retry.`
+                    });
+                } else if (error.message === 'Cow not found or unauthorized' || (error.response && error.response.status === 404)) {
+                    addLog("> AI Error: Record not found.");
+                    clearInterval(interval);
+                    setPollingCowId(null);
+                    setIsSubmitting(false);
+
+                    const newRetryCount = (formData.retryCount || 0) + 1;
+                    const attemptsLeft = Math.max(0, 10 - newRetryCount);
+                    setFormData(prev => ({ ...prev, retryCount: newRetryCount }));
+
+                    if (formData.id) {
+                        try { await syncManager.savePendingCow({ ...formData, retryCount: newRetryCount, errorMessage: 'Record deleted by AI', syncStatus: 'failed' }); } catch (err) {
+                            console.error("Failed to save pending cow", err);
+                        }
+                    }
+
+                    if (newRetryCount >= 10) {
+                        if (formData.id) await syncManager.removePendingCow(formData.id);
+                        setFeedback({
+                            type: 'ERROR',
+                            title: 'Maximum Retries Reached',
+                            message: 'You have reached the maximum of 10 attempts.'
+                        });
+                        setTimeout(() => navigate('/home'), 3500);
+                        return;
+                    }
+
+                    setFeedback({
+                        type: 'ERROR',
+                        title: 'AI Verification Rejected',
+                        message: `Your registration was rejected. The AI either detected a duplicate cow, poor image quality, or a spoofed image.\n\nYou have ${attemptsLeft} attempts left to fix the photos and retry.`
+                    });
+                }
+                // For other errors, we don't clear interval to allow temporary network glitches
+            }
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [pollingCowId, navigate]);
+
     // 1-minute restriction logic
     useEffect(() => {
         const lastRegStr = localStorage.getItem('last_registration_time');
@@ -518,7 +703,7 @@ const AddCow: React.FC = () => {
             const diffMs = Date.now() - lastReg;
             if (diffMs < 60000) {
                 setCooldownRemaining(Math.ceil((60000 - diffMs) / 1000));
-                
+
                 const timer = setInterval(() => {
                     setCooldownRemaining(prev => {
                         if (prev <= 1) {
@@ -531,7 +716,7 @@ const AddCow: React.FC = () => {
                 return () => clearInterval(timer);
             }
         }
-    }, [location.key]); // Verify on mount/nav
+    }, [location.key]);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -583,61 +768,56 @@ const AddCow: React.FC = () => {
     const mutation = useMutation({
         mutationFn: (data: CowFormData) => registerCowAPI(data),
         retry: (failureCount, error: Error & { responseStatus?: number }) => {
-            // Do not retry client/validation errors (4xx)
             if (error.responseStatus && error.responseStatus >= 400 && error.responseStatus < 500) return false;
-            return failureCount < 2; // Retry network or 5xx errors
+            return failureCount < 2;
         },
-        onSuccess: async (response: { success: boolean; message?: string; data?: any }) => {
-            // Update local storage interval timer
+        onSuccess: async (response: { data?: { _id?: string } }) => {
             localStorage.setItem('last_registration_time', Date.now().toString());
 
-            // If this was an offline draft being edited, remove it from offline store now
             if (offlineDraft && offlineDraft.id) {
                 await syncManager.removePendingCow(offlineDraft.id);
             }
 
-            // Invalidate the 'cows' query to instantly fetch updated lists on Home / MyCows
             queryClient.invalidateQueries({ queryKey: ['cows'] });
 
-            const successMsg = response?.message || 'Saved online successfully!';
-            alert(successMsg);
-            navigate('/home');
+            const cowId = response.data?._id;
+            if (cowId) {
+                setPollingCowId(cowId);
+            } else {
+                setIsSubmitting(false);
+                alert('Saved online successfully!');
+                navigate('/home');
+            }
         },
         onError: async (err: Error & { responseStatus?: number }, variables) => {
-            // Check if it is a client/validation error (e.g. 400, 422, etc.)
             const isValidationError = err.responseStatus && err.responseStatus >= 400 && err.responseStatus < 500;
 
             if (isValidationError) {
                 console.warn('Validation error from server', err);
-                
-                // Track Spoof or AI API failures here allowing 10 attempts
                 const maxAttempts = 10;
                 apiAttemptsRef.current += 1;
                 const newCount = apiAttemptsRef.current;
-                
+
+                setIsSubmitting(false);
+
                 if (newCount >= maxAttempts) {
-                    alert(`You have failed AI validation ${maxAttempts} times. Registration blocked.`);
-                    navigate('/home');
+                    setFeedback({ type: 'FATAL', title: 'Registration Blocked', message: `You have failed AI validation ${maxAttempts} times. To prevent spam, you cannot submit this registration right now.` });
                 } else {
-                    alert(`Validation Error: ${err.message}. Attempt ${newCount}/${maxAttempts}`);
+                    setFeedback({ type: 'ERROR', title: 'AI Validation Failed', message: `${err.message || 'The AI detected an issue with your photos.'} (Attempt ${newCount} of ${maxAttempts})` });
                 }
-                
-                return; // Stop here, do not save locally, stay on the form
+                return;
             }
 
             console.error('Failed to save cow on server after retries', err);
-            alert(`Server error: ${err.message || 'Please try again'}. Saving locally to sync later.`);
-            // Fallback to storing locally
-            setIsSubmitting(true);
+            setIsSubmitting(false);
             try {
-                // Remove the old drafted version first before saving the new updated offline draft
                 if (offlineDraft && offlineDraft.id) {
                     await syncManager.removePendingCow(offlineDraft.id);
                 }
 
                 await syncManager.savePendingCow(variables);
                 localStorage.setItem('last_registration_time', Date.now().toString());
-                navigate('/home');
+                setFeedback({ type: 'SERVER_ERROR_SAVED', title: 'Saved Locally (Server Error)', message: `Server error: ${err.message || 'Please try again'}. Your registration has been saved locally for review and will automatically sync later.` });
             } catch (localErr) {
                 console.error('Failed to save locally as fallback', localErr);
                 alert('Also failed to save locally.');
@@ -648,18 +828,41 @@ const AddCow: React.FC = () => {
     });
 
     const handleSubmit = async () => {
+        setIsSubmitting(true);
+        let lat, lng;
+        try {
+            const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+            lat = pos.coords.latitude;
+            lng = pos.coords.longitude;
+        } catch (err) {
+            console.error('GPS error:', err);
+            setIsSubmitting(false);
+            setFeedback({ type: 'ERROR', title: 'Location Required', message: 'Could not fetch your precise GPS location. Please ensure location services are enabled and permissions are granted.' });
+            return;
+        }
+
+        const apiPayload = {
+            ...formData,
+            lat,
+            lng,
+            faceImage: base64ToFile(formData.faceImage, 'face_image.jpg'),
+            muzzleImage: base64ToFile(formData.muzzleImage, 'muzzle_image.jpg'),
+            leftImage: base64ToFile(formData.leftImage, 'left_image.jpg'),
+            rightImage: base64ToFile(formData.rightImage, 'right_image.jpg'),
+            backImage: base64ToFile(formData.backImage, 'back_image.jpg'),
+            tailImage: base64ToFile(formData.tailImage, 'tail_image.jpg'),
+            selfieImage: base64ToFile(formData.selfieImage, 'selfie_image.jpg'),
+        };
+
         if (!navigator.onLine) {
-            setIsSubmitting(true);
             try {
-                // If editing an existing offline draft, clean up the old one first
                 if (offlineDraft && offlineDraft.id) {
                     await syncManager.removePendingCow(offlineDraft.id);
                 }
 
-                await syncManager.savePendingCow(formData);
+                await syncManager.savePendingCow({ ...formData, lat, lng });
                 localStorage.setItem('last_registration_time', Date.now().toString());
-                alert('No internet connection. Saved locally! Will sync when online.');
-                navigate('/home');
+                setFeedback({ type: 'OFFLINE_SAVED', title: 'Saved Locally (Offline)', message: 'No internet connection detected. Your data is safely stored on this device and will sync automatically when you are back online.' });
             } catch (err) {
                 console.error('Failed to save locally', err);
                 alert('Failed to save locally.');
@@ -667,7 +870,7 @@ const AddCow: React.FC = () => {
                 setIsSubmitting(false);
             }
         } else {
-            mutation.mutate(formData);
+            mutation.mutate(apiPayload as any);
         }
     };
 
@@ -685,7 +888,6 @@ const AddCow: React.FC = () => {
         }
     }, [navigate]);
 
-    // Hardware Back Button Interception
     useEffect(() => {
         const backListener = CapacitorApp.addListener('backButton', () => {
             if (activeStep > 0) {
@@ -715,14 +917,132 @@ const AddCow: React.FC = () => {
     return (
         <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
             <Backdrop
-                sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 2, display: 'flex', flexDirection: 'column', gap: 2 }}
-                open={isSubmitting || mutation.isPending}
+                sx={{
+                    color: '#fff',
+                    zIndex: (theme) => theme.zIndex.drawer + 2,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 3,
+                    backdropFilter: 'blur(10px)',
+                    background: 'rgba(0,0,0,0.85)'
+                }}
+                open={isSubmitting || mutation.isPending || !!pollingCowId}
             >
-                <CircularProgress color="inherit" />
-                <Typography variant="h6" fontWeight={600} align="center">
-                    Registering Cow...<br />Please wait
-                </Typography>
+                <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CircularProgress size={64} thickness={4} color="primary" />
+                    <Box sx={{ position: 'absolute', width: 40, height: 40, borderRadius: '50%', backgroundColor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <CheckCircle sx={{ color: 'white', fontSize: 24, animation: 'pulse 1.5s infinite' }} />
+                    </Box>
+                </Box>
+
+                <Box sx={{ textAlign: 'center' }}>
+                    <Typography variant="h5" fontWeight={800} sx={{ mb: 1, letterSpacing: -0.5 }}>
+                        {pollingCowId ? 'AI Deep Analysis' : 'Securing Data'}
+                    </Typography>
+                    <Typography variant="body2" sx={{ opacity: 0.7, maxWidth: 280, mx: 'auto' }}>
+                        {pollingCowId ? 'Our neural networks are verifying the cow biometrics. This usually takes 10-20 seconds.' : 'Establishing secure connection and uploading high-resolution photos...'}
+                    </Typography>
+                </Box>
+
+                {/* TERMINAL OVERLAY */}
+                <Box sx={{
+                    width: '90%',
+                    maxWidth: 400,
+                    bgcolor: '#1E1E1E',
+                    borderRadius: 2,
+                    p: 2,
+                    fontFamily: 'monospace',
+                    fontSize: '0.75rem',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                    border: '1px solid rgba(255,255,255,0.1)'
+                }}>
+                    <Box sx={{ display: 'flex', gap: 0.5, mb: 1.5 }}>
+                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#FF5F56' }} />
+                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#FFBD2E' }} />
+                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#27C93F' }} />
+                        <Typography variant="caption" sx={{ ml: 1, color: 'rgba(255,255,255,0.4)', fontWeight: 'bold', fontSize: 10 }}>AI_PIPELINE_LOGS</Typography>
+                    </Box>
+                    <Box sx={{ color: '#00FF00', maxHeight: 150, overflowY: 'auto' }}>
+                        {terminalLogs.length === 0 ? (
+                            <Typography variant="caption" sx={{ color: '#888' }}>Waiting for server response...</Typography>
+                        ) : (
+                            terminalLogs.map((log, i) => (
+                                <div key={i} style={{ marginBottom: 4, display: 'flex', gap: '8px' }}>
+                                    <span style={{ color: '#555' }}>[{new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}]</span>
+                                    <span>{log}</span>
+                                </div>
+                            ))
+                        )}
+                        {pollingCowId && (
+                            <motion.div
+                                animate={{ opacity: [1, 0, 1] }}
+                                transition={{ duration: 0.8, repeat: Infinity }}
+                                style={{ display: 'inline-block', width: 8, height: 14, background: '#00FF00', marginLeft: 4, verticalAlign: 'middle' }}
+                            />
+                        )}
+                    </Box>
+                </Box>
+
+                <Button
+                    variant="text"
+                    size="small"
+                    sx={{ color: 'rgba(255,255,255,0.5)', mt: 1, textTransform: 'none' }}
+                    onClick={() => {
+                        if (window.confirm("AI processing is running in background. You can check the 'My Cows' list later. Exit now?")) {
+                            setPollingCowId(null);
+                            setIsSubmitting(false);
+                            navigate('/home');
+                        }
+                    }}
+                >
+                    Process in Background
+                </Button>
             </Backdrop>
+
+            <Dialog
+                open={feedback !== null}
+                onClose={() => {
+                    if (feedback?.type === 'ERROR') {
+                        setFeedback(null);
+                    }
+                }}
+                PaperProps={{ sx: { borderRadius: 3, p: 1 } }}
+            >
+                {feedback && (
+                    <>
+                        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1, fontWeight: 'bold', color: feedback.type === 'OFFLINE_SAVED' || feedback.type === 'SERVER_ERROR_SAVED' ? 'warning.main' : 'error.main' }}>
+                            {feedback.type === 'ERROR' || feedback.type === 'FATAL' ? <ErrorOutline sx={{ fontSize: 28 }} /> : <WifiOffIcon sx={{ fontSize: 28 }} />}
+                            {feedback.title}
+                        </DialogTitle>
+                        <DialogContent>
+                            <Typography variant="body1">{feedback.message}</Typography>
+                            {(feedback.type === 'OFFLINE_SAVED' || feedback.type === 'SERVER_ERROR_SAVED') && (
+                                <Box sx={{ mt: 2, p: 1.5, bgcolor: '#F9FAFB', borderRadius: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                    <CheckCircle color="success" />
+                                    <Typography variant="body2" fontWeight={600}>Don't worry! Your filled data is safely preserved on your device.</Typography>
+                                </Box>
+                            )}
+                            {feedback.type === 'ERROR' && (
+                                <Box sx={{ mt: 2, p: 1.5, bgcolor: '#FEF2F2', borderRadius: 2, border: '1px solid #FECACA' }}>
+                                    <Typography variant="body2" color="error.dark" fontWeight={600}>Action Required:</Typography>
+                                    <Typography variant="body2" color="error.main">Please click 'Fix Errors & Try Again' below, go back to the relevant steps (like Visual ID), capture clearer, live photos, and try submitting again.</Typography>
+                                </Box>
+                            )}
+                        </DialogContent>
+                        <DialogActions sx={{ pt: 2, px: 3, pb: 2 }}>
+                            {feedback.type === 'ERROR' ? (
+                                <Button variant="contained" color="error" fullWidth sx={{ borderRadius: 6, fontWeight: 'bold' }} onClick={() => setFeedback(null)}>
+                                    Fix Errors & Try Again
+                                </Button>
+                            ) : (
+                                <Button variant="contained" fullWidth sx={{ borderRadius: 6, fontWeight: 'bold' }} onClick={() => { setFeedback(null); navigate('/home'); }}>
+                                    Return to Dashboard
+                                </Button>
+                            )}
+                        </DialogActions>
+                    </>
+                )}
+            </Dialog>
 
             {/* FIXED TOP HEADER */}
             <Box sx={{
@@ -737,19 +1057,19 @@ const AddCow: React.FC = () => {
                     </Box>
 
                     {/* Offline Awareness Notice */}
-            {!navigator.onLine && (
-                <Alert 
-                    severity="warning" 
-                    icon={<WifiOffIcon />}
-                    sx={{ mb: 2, borderRadius: '12px' }}
-                >
-                    <AlertTitle sx={{ fontWeight: 'bold' }}>Offline Mode</AlertTitle>
-                    You are offline. Registration will be saved locally and sync automatically when internet is restored.
-                </Alert>
-            )}
+                    {!navigator.onLine && (
+                        <Alert
+                            severity="warning"
+                            icon={<WifiOffIcon />}
+                            sx={{ mb: 2, borderRadius: '12px' }}
+                        >
+                            <AlertTitle sx={{ fontWeight: 'bold' }}>Offline Mode</AlertTitle>
+                            You are offline. Registration will be saved locally and sync automatically when internet is restored.
+                        </Alert>
+                    )}
 
-            {/* FIXED STEPPER */}
-            <Stepper nonLinear activeStep={activeStep} alternativeLabel sx={{ mb: 0.5 }}>
+                    {/* FIXED STEPPER */}
+                    <Stepper nonLinear activeStep={activeStep} alternativeLabel sx={{ mb: 0.5 }}>
                         {steps.map((label, index) => (
                             <Step key={label} completed={activeStep > index}>
                                 <StepButton

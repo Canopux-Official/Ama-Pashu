@@ -3,6 +3,7 @@ dotenv.config();
 import axios from 'axios';
 import connectDB from "./config/db";
 import express from "express";
+import path from "path";
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -42,7 +43,9 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors(corsOptions));
@@ -77,6 +80,7 @@ const authLimiter = rateLimit({
 
 connectDB();
 
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/cattle', cattleRoutes);
 app.use('/api/location', locationRoutes);

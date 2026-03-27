@@ -40,6 +40,7 @@ interface CowProfileData {
 }
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCowProfileAPI } from '../apis/apis';
+import { getImageUrl } from '../utils/imageUtils';
 import { CircularProgress } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 
@@ -89,7 +90,7 @@ const CowProfile: React.FC = () => {
                     <ArrowBack />
                 </IconButton>
                 <img
-                    src={cowData?.photos?.muzzle || "https://placehold.co/600x400"}
+                    src={getImageUrl(cowData?.photos?.muzzle) || "https://placehold.co/600x400"}
                     alt="Cow"
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
@@ -128,7 +129,7 @@ const CowProfile: React.FC = () => {
                                     { label: 'Back View', key: 'backView' as const },
                                     { label: 'Tail / Udders', key: 'tailView' as const }
                                 ].map(({ label, key }, index) => {
-                                    const imageUrl = cowData?.photos?.[key] || `https://placehold.co/300x200?text=${label.split(' ')[0]}`;
+                                    const imageUrl = getImageUrl(cowData?.photos?.[key]) || `https://placehold.co/300x200?text=${label.split(' ')[0]}`;
                                     return (
                                         <Box key={index}>
                                             <Paper elevation={0} sx={{

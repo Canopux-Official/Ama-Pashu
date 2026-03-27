@@ -4,6 +4,8 @@ import csv from 'csv-parser';
 import dotenv from 'dotenv';
 import axios from 'axios';
 import os from 'os';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
 import { Location } from './src/models/Location';
 import { User } from './src/models/User';
@@ -12,6 +14,11 @@ import { Cattle } from './src/models/Cattel';
 dotenv.config();
 
 const CSV_FILE_PATH = './location.csv';
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+
+if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
 
 /* ==========================================
    HELPERS
@@ -40,12 +47,15 @@ const openFileExplorer = (promptText: string): string => {
     }
 };
 
-const convertToBase64 = (filePath: string): string => {
+const saveImageToUploads = (filePath: string): string => {
     try {
         const fileData = fs.readFileSync(filePath);
-        return `data:image/jpeg;base64,${fileData.toString('base64')}`;
+        const extension = path.extname(filePath) || '.jpg';
+        const fileName = `${uuidv4()}${extension}`;
+        fs.writeFileSync(path.join(UPLOADS_DIR, fileName), fileData);
+        return fileName;
     } catch (err) {
-        console.error(`❌ Error reading file at ${filePath}.`);
+        console.error(`❌ Error processing file at ${filePath}.`);
         throw err;
     }
 };
@@ -94,15 +104,17 @@ async function seedDatabase() {
            2. LOCATION SEEDING (FROM CSV)
            ------------------------------------------ */
         const locations: any[] = [];
-        let rowCount = 0;
 
         await new Promise<void>((resolve, reject) => {
+            if (!fs.existsSync(CSV_FILE_PATH)) {
+                console.warn(`⚠️ Warning: ${CSV_FILE_PATH} not found. Skipping location seeding.`);
+                return resolve();
+            }
             fs.createReadStream(CSV_FILE_PATH)
                 .pipe(csv({
                     mapHeaders: ({ header }) => header.trim().replace(/^[\uFEFF\xEF\xBB\xBF]+/, '')
                 }))
                 .on('data', (row) => {
-                    rowCount++;
                     const state = row['State Name'] || row['State'] || row['state'];
                     const district = row['District Name'] || row['District'] || row['district'];
                     const block = row['Block Name'] || row['Block'] || row['block'];
@@ -156,15 +168,15 @@ async function seedDatabase() {
         for (let i = 1; i <= 12; i++) {
             console.log(`\n[${i}/12] Select images for Cattle...`);
 
-            let muzzleImageBase64 = '';
-            let faceImageBase64 = '';
+            let muzzleFilename = '';
+            let faceFilename = '';
 
             try {
                 const muzzlePath = openFileExplorer(`Select MUZZLE Image for Cow ${i}`);
-                muzzleImageBase64 = convertToBase64(muzzlePath);
+                muzzleFilename = saveImageToUploads(muzzlePath);
 
                 const facePath = openFileExplorer(`Select FACE Image for Cow ${i}`);
-                faceImageBase64 = convertToBase64(facePath);
+                faceFilename = saveImageToUploads(facePath);
             } catch (e: any) {
                 console.log(`⚠️ Selection failed: ${e.message}. Skipping this cow.`);
                 continue;
@@ -188,13 +200,22 @@ async function seedDatabase() {
                     date: new Date(),
                     price: Math.floor(Math.random() * 50000) + 10000
                 } : undefined,
+                location: {
+                    lat: 20.2961 + (Math.random() - 0.5) * 0.1,
+                    lng: 85.8245 + (Math.random() - 0.5) * 0.1
+                },
                 photos: {
-                    faceProfile: faceImageBase64,
-                    muzzle: muzzleImageBase64,
-                    leftProfile: faceImageBase64,
-                    rightProfile: faceImageBase64,
-                    backView: faceImageBase64,
-                    tailView: faceImageBase64
+                    faceProfile: faceFilename,
+                    muzzle: muzzleFilename,
+                    selfie: faceFilename, // Using face as placeholder for selfie
+                    leftProfile: faceFilename,
+                    rightProfile: faceFilename,
+                    backView: faceFilename,
+                    tailView: faceFilename
+                },
+                aiMetadata: {
+                    isRegistered: false,
+                    status: 'PENDING'
                 },
                 currentStatus: randomStatus(),
                 lastWeight: Math.floor(Math.random() * 400) + 100,
@@ -212,18 +233,19 @@ async function seedDatabase() {
                 $push: { cows: savedCow._id }
             });
 
-            // DL API Call
+            // DL API Call (Local Queue Trigger)
             try {
                 const dlApiUrl = process.env.DL_MODEL_SERVER_LINK || 'http://localhost:8000';
-                await axios.post(`${dlApiUrl}/register`, {
+                await axios.post(`${dlApiUrl}/local-queue-trigger`, {
+                    type: 'register',
                     cow_id: savedCow._id.toString(),
                     farmer_id: farmer._id.toString(),
-                    face_image: faceImageBase64,
-                    muzzle_image: muzzleImageBase64
+                    face_image_oci: faceFilename,
+                    muzzle_image_oci: muzzleFilename
                 });
-                console.log(`✅ DL API vector registration successful for ${tagNo}`);
+                console.log(`✅ DL API registration job triggered for ${tagNo}`);
             } catch (dlError: any) {
-                console.error(`⚠️ DL API Error for ${tagNo}:`, dlError.message);
+                console.error(`⚠️ DL API Error for ${tagNo}:`, dlError.response?.data || dlError.message);
             }
 
             console.log(`✅ Registered cow ${i} with Tag: ${tagNo}`);
@@ -239,4 +261,4 @@ async function seedDatabase() {
     }
 }
 
-seedDatabase();
+seedDatabase();

@@ -51,9 +51,10 @@ const GUIDE_CONFIG: Record<CameraGuidanceType, {
         label: "Cow's Face",
         icon: '🐄',
         tips: [
-            'Centre the face in the oval guide',
-            'Ensure good lighting',
-            'Hold steady — 3-second scan',
+            'Center Face: Keep the head in the oval and the muzzle visible.',
+            'Front View: Take the photo directly from the front.',
+            'Good Lighting: Ensure the muzzle is well-lit and clear.',
+            'Hold Steady: Stay still for a 3-second scan.',
         ],
         defaultFacing: 'environment',
         useAIScan: true,
@@ -127,7 +128,7 @@ const GUIDE_CONFIG: Record<CameraGuidanceType, {
 };
 
 // ─── TUNABLE CONSTANTS ────────────────────────────────────────────────────────
-const MUZZLE_CONFIDENCE_THRESHOLD = 0.50;
+const MUZZLE_CONFIDENCE_THRESHOLD = 0.78;
 const MODEL_INPUT_SIZE: [number, number] = [640, 640];
 const RECORDING_DURATION_MS = 3000;
 const CAPTURE_INTERVAL_MS = 400;

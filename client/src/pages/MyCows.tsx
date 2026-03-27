@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 import { getMyCattleAPI } from '../apis/apis';
+import { getImageUrl } from '../utils/imageUtils';
 
 interface CowListSummary {
     _id: string;
@@ -19,6 +20,7 @@ interface CowListSummary {
     currentStatus: string;
     ageMonths?: number;
     photos?: { faceProfile?: string, muzzle?: string };
+    isDispute?: boolean;
 }
 
 const MyCows: React.FC = () => {
@@ -35,8 +37,11 @@ const MyCows: React.FC = () => {
     };
 
     const cows: CowListSummary[] = cowsResponse?.data || [];
+    
+    // Only show successful registrations that are not disputed
+    const nonDisputedCows = cows.filter((cow) => !cow.isDispute);
 
-    const filteredCows = cows.filter(cow =>
+    const filteredCows = nonDisputedCows.filter(cow =>
         cow.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         cow.tagNumber?.includes(searchTerm)
     );
@@ -112,7 +117,7 @@ const MyCows: React.FC = () => {
                                 '&:active': { bgcolor: '#f5f5f5', transform: 'scale(0.98)' }
                             }}
                         >
-                            <Avatar src={cow.photos?.faceProfile || cow.photos?.muzzle || 'https://placehold.co/100'} variant="rounded" sx={{ width: 64, height: 64, borderRadius: 3 }} />
+                            <Avatar src={getImageUrl(cow.photos?.faceProfile) || getImageUrl(cow.photos?.muzzle) || 'https://placehold.co/100'} variant="rounded" sx={{ width: 64, height: 64, borderRadius: 3 }} />
 
                             <Box sx={{ flexGrow: 1 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>

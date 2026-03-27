@@ -41,6 +41,9 @@ const Home: React.FC = () => {
     const cows = cowsResponse?.data || [];
     const isOffline = cowsResponse?.isOffline || false;
 
+    // Filter out disputed cows for the main herd metrics
+    const nonDisputedCows = cows.filter((c: CowSummary) => !c.isDispute);
+
     useEffect(() => {
         const fetchUserData = async () => {
             try {
@@ -92,10 +95,10 @@ const Home: React.FC = () => {
                 {/* 2. Statistics Overview */}
                 <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
                     <Box sx={{ flex: 1 }}>
-                        <StatCard label="Total Cattle" value={cows.length} icon={PetsIcon} color="text.primary" />
+                        <StatCard label="Total Cattle" value={nonDisputedCows.length} icon={PetsIcon} color="text.primary" />
                     </Box>
                     <Box sx={{ flex: 1 }}>
-                        <StatCard label="Pregnant" value={cows.filter((c: CowSummary) => c.currentStatus === 'Pregnant').length} icon={FavoriteIcon} color="warning.main" />
+                        <StatCard label="Pregnant" value={nonDisputedCows.filter((c: CowSummary) => c.currentStatus === 'Pregnant').length} icon={FavoriteIcon} color="warning.main" />
                     </Box>
                 </Stack>
 
@@ -120,7 +123,7 @@ const Home: React.FC = () => {
                         Your Herd
                     </Typography>
 
-                    {cows.length === 0 ? (
+                    {nonDisputedCows.length === 0 ? (
                         /* ZERO-STATE UI: Shown when there are no cows */
                         <Box sx={{
                             textAlign: 'center',
@@ -151,7 +154,7 @@ const Home: React.FC = () => {
                     ) : (
                         /* POPULATED STATE UI: Shown when cows exist */
                         <Box>
-                            {cows.slice(0, 2).map((cow: CowSummary, index: number) => (
+                            {nonDisputedCows.slice(0, 2).map((cow: CowSummary, index: number) => (
                                 <Box
                                     key={index}
                                     sx={{

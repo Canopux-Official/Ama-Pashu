@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getMyCattleAPI, searchCowAPI } from '../apis/apis';
 import { HTML5CameraDialog } from '../components/HTML5CameraDialog';
-
+import { base64ToFile, compressImage, getImageUrl } from '../utils/imageUtils';
 // ── Shared Types ────────────────────────────────────────────────────────────
 interface CowListSummary {
     _id: string;
@@ -61,38 +61,8 @@ const performSearch = (cows: CowListSummary[], term: string) => {
     );
 };
 
-// 3. Image Compression Utility
-const compressImage = (dataUrl: string, maxWidth = 640, maxHeight = 480): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-            let { width, height } = img;
 
-            if (width > height) {
-                if (width > maxWidth) {
-                    height *= maxWidth / width;
-                    width = maxWidth;
-                }
-            } else {
-                if (height > maxHeight) {
-                    width *= maxHeight / height;
-                    height = maxHeight;
-                }
-            }
 
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return resolve(dataUrl); // Fallback to original if canvas fails
-
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.8)); // Compress to 80% JPEG
-        };
-        img.onerror = reject;
-        img.src = dataUrl;
-    });
-};
 
 const getStatusColor = (status: string): 'error' | 'warning' | 'info' | 'default' | 'success' => {
     switch (status) {
@@ -248,7 +218,7 @@ const SearchTab = () => {
                                     }}
                                 >
                                     <Avatar
-                                        src={cow.photos?.faceProfile || cow.photos?.muzzle || ''}
+                                        src={getImageUrl(cow.photos?.faceProfile) || getImageUrl(cow.photos?.muzzle) || ''}
                                         variant="rounded"
                                         sx={{ width: 64, height: 64, borderRadius: 3, bgcolor: 'grey.200' }}
                                     />
@@ -315,8 +285,16 @@ const PhotoCaptureBox = ({
             reader.onload = async (event) => {
                 const result = event.target?.result;
                 if (typeof result === 'string') {
-                    // Compress image before setting state
-                    const compressed = await compressImage(result);
+
+                    // --- DYNAMIC COMPRESSION LOGIC ---
+                    const isMuzzle = guidanceType === 'muzzle';
+
+                    // Muzzle: 1280px max, 95% quality (preserves ridges)
+                    // Others: 800px max, 80% quality (saves bandwidth)
+                    const targetSize = isMuzzle ? 1280 : 800;
+                    const targetQuality = isMuzzle ? 0.95 : 0.80;
+
+                    const compressed = await compressImage(result, targetSize, targetSize, targetQuality);
                     onCapture(compressed);
                 }
             };
@@ -325,7 +303,12 @@ const PhotoCaptureBox = ({
     };
 
     const handleCameraCapture = async (capturedSrc: string) => {
-        const compressed = await compressImage(capturedSrc);
+        // Apply the exact same logic for live camera captures
+        const isMuzzle = guidanceType === 'muzzle';
+        const targetSize = isMuzzle ? 1280 : 800;
+        const targetQuality = isMuzzle ? 0.95 : 0.80;
+
+        const compressed = await compressImage(capturedSrc, targetSize, targetSize, targetQuality);
         onCapture(compressed);
         setCameraOpen(false);
     }
@@ -443,7 +426,11 @@ const ScanTab = () => {
         setScanning(true);
 
         try {
-            const response = await searchCowAPI({ faceImage, muzzleImage });
+            const payloadForApi = {
+                faceImage: base64ToFile(faceImage, 'search_face.jpg'),
+                muzzleImage: base64ToFile(muzzleImage, 'search_muzzle.jpg')
+            };
+            const response = await searchCowAPI(payloadForApi as unknown);
 
             if (response.success && response.data.cowId) {
                 setMatchedCow(response.data);
@@ -545,7 +532,7 @@ const ScanTab = () => {
                     {matchedCow && matchedCow.cow && (
                         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 2 }}>
                             <Avatar
-                                src={matchedCow.cow.photos?.faceProfile || matchedCow.cow.photos?.muzzle || ''}
+                                src={getImageUrl(matchedCow.cow.photos?.faceProfile) || getImageUrl(matchedCow.cow.photos?.muzzle) || ''}
                                 sx={{ width: 80, height: 80, mb: 2 }}
                             />
                             <Typography variant="h6" fontWeight="bold">
