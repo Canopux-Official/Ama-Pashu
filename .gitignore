@@ -56,3 +56,4 @@ wipe_db.py
 .agents
 .venv
 wipe_db.ts
+uploads

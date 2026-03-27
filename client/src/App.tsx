@@ -12,6 +12,7 @@ import { queryClient } from './queryClient';
 import PageTransition from './components/PageTransition';
 import { syncManager } from './utils/syncManager';
 import { getServerHealthAPI } from './apis/apis';
+import { Geolocation } from '@capacitor/geolocation';
 import ocacLogo from '../src/assets/ocac.png';
 import iiitLogo from '../src/assets/iiit.png';
 // Import Pages
@@ -27,6 +28,52 @@ import Register from './pages/Register';
 import Login from './pages/Login';
 import OfflineSync from './pages/OfflineSync';
 import Disputes from './pages/Disputes';
+import { ErrorOutline } from '@mui/icons-material';
+import { Button } from '@mui/material';
+const LocationGuard = ({ children }: { children: React.ReactNode }) => {
+  const [hasLocation, setHasLocation] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkLocation = async () => {
+      try {
+        let perm = await Geolocation.checkPermissions();
+        if (perm.location !== 'granted') {
+          perm = await Geolocation.requestPermissions();
+        }
+        if (perm.location !== 'granted') {
+          setHasLocation(false);
+          return;
+        }
+        // Fetch to ensure GPS is physically ON
+        await Geolocation.getCurrentPosition({ timeout: 5000, maximumAge: 60000 });
+        setHasLocation(true);
+      } catch (err) {
+        console.error("Location error", err);
+        setHasLocation(false);
+      }
+    };
+    checkLocation();
+  }, []);
+
+  if (hasLocation === null) {
+    return <Box sx={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center' }}><CircularProgress /></Box>;
+  }
+
+  if (!hasLocation) {
+    return (
+      <Box sx={{ p: 4, height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+        <ErrorOutline color="error" sx={{ fontSize: 64, mb: 2 }} />
+        <Typography variant="h5" fontWeight="bold" gutterBottom>Location Required</Typography>
+        <Typography variant="body1" color="text.secondary" mb={4}>
+          Ama Pashu requires your GPS location to be turned on to verify livestock registration areas. Please enable your Location Services and location permissions to continue using the app.
+        </Typography>
+        <Button variant="contained" onClick={() => window.location.reload()}>Retry</Button>
+      </Box>
+    );
+  }
+
+  return <>{children}</>;
+};
 
 const AnimatedOutlet = () => {
   const location = useLocation();
@@ -251,7 +298,9 @@ const App: React.FC = () => {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <Router>
-          <AnimatedRoutes isFirstLaunch={isFirstLaunch} isAuthenticated={isAuthenticated} />
+          <LocationGuard>
+            <AnimatedRoutes isFirstLaunch={isFirstLaunch} isAuthenticated={isAuthenticated} />
+          </LocationGuard>
         </Router>
       </ThemeProvider>
     </QueryClientProvider>

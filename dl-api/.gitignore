@@ -3,3 +3,7 @@
 .venv
 __pycache__
 wipe_db.py
+clear_db.py
+ml_logs
+scripts/advanced_load_test.py
+requirements-test.txt

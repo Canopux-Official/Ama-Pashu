@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
 
@@ -129,15 +130,48 @@ export const getCowProfileAPI = async (cowId: string) => {
 };
 
 /**
- * Register a new cow to the farmer's herd
+ * Delete a specific cow by its MongoDB ID
  */
-export const registerCowAPI = async <T,>(cowData: T) => {
+export const deleteCowAPI = async (cowId: string) => {
     try {
         const { value: token } = await Preferences.get({ key: 'jwt_token' });
         if (!token) throw new Error('Not authenticated');
 
-        const response = await axios.post(`${API_BASE}/api/cattle`, cowData, {
+        const response = await axios.delete(`${API_BASE}/api/cattle/${cowId}`, {
             headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to delete cow');
+        }
+
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.data?.message) {
+            throw new Error(error.response.data.message);
+        }
+        throw error;
+    }
+};
+
+/**
+ * Register a new cow to the farmer's herd
+ */
+export const registerCowAPI = async (cowData: Record<string, any>) => {
+    try {
+        const { value: token } = await Preferences.get({ key: 'jwt_token' });
+        if (!token) throw new Error('Not authenticated');
+
+        const formData = new FormData();
+
+        Object.keys(cowData).forEach((key) => {
+            formData.append(key, cowData[key]);
+        });
+
+        const response = await axios.post(`${API_BASE}/api/cattle`, formData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            }
         });
 
         if (!response.data.success) {
@@ -191,8 +225,15 @@ export const searchCowAPI = async (searchData: { faceImage: string; muzzleImage:
         const { value: token } = await Preferences.get({ key: 'jwt_token' });
         if (!token) throw new Error('Not authenticated');
 
-        const response = await axios.post(`${API_BASE}/api/cattle/search`, searchData, {
-            headers: { Authorization: `Bearer ${token}` }
+        const formData = new FormData();
+
+        formData.append('faceImage', searchData.faceImage);
+        formData.append('muzzleImage', searchData.muzzleImage);
+
+        const response = await axios.post(`${API_BASE}/api/cattle/search`, formData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            }
         });
 
         if (!response.data.success) {

@@ -22,6 +22,10 @@ export interface ICattle extends Document {
     };
 
     // Media & AI
+    location?: {
+        lat: number;
+        lng: number;
+    };
     photos: {
         faceProfile: string;
         muzzle: string;
@@ -33,6 +37,7 @@ export interface ICattle extends Document {
     };
     aiMetadata: {
         isRegistered: boolean;
+        status?: string;
         confidenceScore?: number;
         lastScannedAt?: Date;
     };
@@ -69,6 +74,10 @@ const CattleSchema = new Schema<ICattle>({
         date: { type: Date },
         price: { type: Number }
     },
+    location: {
+        lat: { type: Number },
+        lng: { type: Number }
+    },
 
     photos: {
         faceProfile: { type: String, required: true },
@@ -82,6 +91,7 @@ const CattleSchema = new Schema<ICattle>({
 
     aiMetadata: {
         isRegistered: { type: Boolean, default: false },
+        status: String,
         confidenceScore: Number,
         lastScannedAt: Date
     },

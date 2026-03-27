@@ -164,8 +164,12 @@ const UserProfile: React.FC = () => {
         } catch (error) {
             console.error('Logout API failed, proceeding with local clear', error);
         }
-        // Wipe all app preferences as requested
-        await Preferences.clear();
+        // Remove only auth-related prefs to preserve onboarding state
+        await Preferences.remove({ key: 'jwt_token' });
+        await Preferences.remove({ key: 'user_data' });
+        
+        // Clear React Query cache so data doesn't bleed into next login
+        queryClient.clear();
 
         window.dispatchEvent(new Event('auth-change'));
         navigate('/login');

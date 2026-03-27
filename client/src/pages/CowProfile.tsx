@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Container, Box, Typography, Paper, Chip, Stack, IconButton,
-    List, ListItem, ListItemAvatar, Avatar, ListItemText, Tabs, Tab, Divider, Button
+    List, ListItem, ListItemAvatar, Avatar, ListItemText, Tabs, Tab, Divider, Button, Dialog
 } from '@mui/material';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import {
     ArrowBack, WaterDrop,
     PhotoLibrary, Info, QrCodeScanner, Cake, Scale,
@@ -25,11 +26,13 @@ interface CowProfileData {
     currentStatus?: string;
     lastWeight?: number;
     photos?: {
+        faceProfile?: string;
         muzzle?: string;
         leftProfile?: string;
         rightProfile?: string;
         backView?: string;
         tailView?: string;
+        selfie?: string;
     };
     healthStats?: {
         birthWeight?: number;
@@ -40,6 +43,7 @@ interface CowProfileData {
 }
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCowProfileAPI } from '../apis/apis';
+import { getImageUrl } from '../utils/imageUtils';
 import { CircularProgress } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 
@@ -47,6 +51,33 @@ const CowProfile: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [tabValue, setTabValue] = useState(0);
+    const [lightboxOpen, setLightboxOpen] = useState(false);
+    const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
+    const openLightbox = (url: string) => {
+        setLightboxImage(url);
+        setLightboxOpen(true);
+        window.history.pushState({ lightboxOpen: true }, '');
+    };
+
+    const closeLightbox = () => {
+        setLightboxOpen(false);
+        setLightboxImage(null);
+        if (window.history.state?.lightboxOpen) {
+            window.history.back();
+        }
+    };
+
+    useEffect(() => {
+        const handlePopState = () => {
+            if (lightboxOpen) {
+                setLightboxOpen(false);
+                setLightboxImage(null);
+            }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [lightboxOpen]);
 
     const { data: cowDataResponse, isLoading, error } = useQuery({
         queryKey: ['cowProfile', id],
@@ -84,12 +115,12 @@ const CowProfile: React.FC = () => {
             <Box sx={{ position: 'relative', height: 240, bgcolor: '#eee' }}>
                 <IconButton
                     onClick={() => navigate(-1)}
-                    sx={{ position: 'absolute', top: 16, left: 16, bgcolor: 'white', '&:hover': { bgcolor: 'white' }, zIndex: 20 }}
+                    sx={{ position: 'absolute', top: 'calc(max(16px, env(safe-area-inset-top)) + 16px)', left: 16, bgcolor: 'white', '&:hover': { bgcolor: 'white' }, zIndex: 20 }}
                 >
                     <ArrowBack />
                 </IconButton>
                 <img
-                    src={cowData?.photos?.muzzle || "https://placehold.co/600x400"}
+                    src={getImageUrl(cowData?.photos?.muzzle) || "https://placehold.co/600x400"}
                     alt="Cow"
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
@@ -122,18 +153,22 @@ const CowProfile: React.FC = () => {
                             </Typography>
                             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
                                 {[
+                                    { label: 'Face Profile', key: 'faceProfile' as const },
+                                    { label: 'Farmer Selfie', key: 'selfie' as const },
                                     { label: 'Muzzle (Nose)', key: 'muzzle' as const },
                                     { label: 'Left Profile', key: 'leftProfile' as const },
                                     { label: 'Right Profile', key: 'rightProfile' as const },
                                     { label: 'Back View', key: 'backView' as const },
                                     { label: 'Tail / Udders', key: 'tailView' as const }
                                 ].map(({ label, key }, index) => {
-                                    const imageUrl = cowData?.photos?.[key] || `https://placehold.co/300x200?text=${label.split(' ')[0]}`;
+                                    const imageUrl = getImageUrl(cowData?.photos?.[key]) || `https://placehold.co/300x200?text=${label.split(' ')[0]}`;
                                     return (
                                         <Box key={index}>
-                                            <Paper elevation={0} sx={{
+                                            <Paper elevation={0} 
+                                                onClick={() => openLightbox(imageUrl)}
+                                                sx={{
                                                 height: 120, bgcolor: '#f5f5f5', borderRadius: 2, overflow: 'hidden', position: 'relative',
-                                                border: '1px solid #eee'
+                                                border: '1px solid #eee', cursor: 'pointer'
                                             }}>
                                                 <img
                                                     src={imageUrl}
@@ -223,6 +258,42 @@ const CowProfile: React.FC = () => {
                     )}
                 </Paper>
             </Container>
+
+            {/* LIGHTBOX DIALOG */}
+            <Dialog 
+                open={lightboxOpen} 
+                onClose={closeLightbox}
+                fullScreen
+                PaperProps={{
+                    sx: {
+                        bgcolor: 'rgba(0,0,0,0.9)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }
+                }}
+            >
+                <IconButton 
+                    onClick={closeLightbox} 
+                    sx={{ position: 'absolute', top: 'calc(max(16px, env(safe-area-inset-top)) + 16px)', left: 16, color: 'white', zIndex: 100, bgcolor: 'rgba(0,0,0,0.5)' }}
+                >
+                    <ArrowBack />
+                </IconButton>
+                {lightboxImage && (
+                    <TransformWrapper centerOnInit={true} centerZoomedOut={true}>
+                        <TransformComponent
+                            wrapperStyle={{ width: '100vw', height: '100vh' }}
+                            contentStyle={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                            <img 
+                                src={lightboxImage} 
+                                alt="Zoomed" 
+                                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                            />
+                        </TransformComponent>
+                    </TransformWrapper>
+                )}
+            </Dialog>
 
         </Container>
     );
