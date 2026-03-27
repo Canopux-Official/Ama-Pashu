@@ -130,6 +130,31 @@ export const getCowProfileAPI = async (cowId: string) => {
 };
 
 /**
+ * Delete a specific cow by its MongoDB ID
+ */
+export const deleteCowAPI = async (cowId: string) => {
+    try {
+        const { value: token } = await Preferences.get({ key: 'jwt_token' });
+        if (!token) throw new Error('Not authenticated');
+
+        const response = await axios.delete(`${API_BASE}/api/cattle/${cowId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to delete cow');
+        }
+
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.data?.message) {
+            throw new Error(error.response.data.message);
+        }
+        throw error;
+    }
+};
+
+/**
  * Register a new cow to the farmer's herd
  */
 export const registerCowAPI = async (cowData: Record<string, any>) => {

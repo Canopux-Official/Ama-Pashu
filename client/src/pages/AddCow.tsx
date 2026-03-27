@@ -12,7 +12,7 @@ import {
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { syncManager } from '../utils/syncManager';
-import { registerCowAPI, getCowProfileAPI } from '../apis/apis';
+import { registerCowAPI, getCowProfileAPI, deleteCowAPI } from '../apis/apis';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Geolocation } from '@capacitor/geolocation';
@@ -531,6 +531,8 @@ const AddCow: React.FC = () => {
     const [feedback, setFeedback] = useState<{ type: 'ERROR' | 'OFFLINE_SAVED' | 'SERVER_ERROR_SAVED' | 'FATAL', title: string, message: string } | null>(null);
     const [pollingCowId, setPollingCowId] = useState<string | null>(null);
     const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
+    const [showDisputeDialog, setShowDisputeDialog] = useState(false);
+    const [disputeCowId, setDisputeCowId] = useState<string | null>(null);
 
     const addLog = (msg: string) => {
         setTerminalLogs(prev => {
@@ -560,15 +562,20 @@ const AddCow: React.FC = () => {
                     setTimeout(() => addLog("> Verifying against duplicate database..."), 4000);
                 }
 
-                if (aiStatus === 'SUCCESS' || aiStatus === 'DISPUTE') {
+                if (aiStatus === 'SUCCESS') {
                     addLog("> Registration Verified Successfully! Finalizing...");
                     clearInterval(interval);
                     setTimeout(() => {
                         setPollingCowId(null);
                         setIsSubmitting(false);
-                        alert(aiStatus === 'DISPUTE' ? 'Registered with a Dispute flag (similar cow exists).' : 'Cow registered and AI Verified successfully!');
+                        alert('Cow registered and AI Verified successfully!');
                         navigate('/home');
                     }, 1000);
+                } else if (aiStatus === 'DISPUTE') {
+                    addLog("> Dispute Detected! Waiting for user confirmation...");
+                    clearInterval(interval);
+                    setDisputeCowId(pollingCowId);
+                    setShowDisputeDialog(true);
                 } else if (aiStatus && aiStatus !== 'PENDING') {
                     // It's FAILED, NO_MUZZLE_DETECTED, DUPLICATE, FAILED_MAX_RETRIES, FACE_MUZZLE_MISMATCH, SPOOF_DETECTED
                     addLog(`> AI REJECTED: ${aiStatus}`);
@@ -1042,6 +1049,43 @@ const AddCow: React.FC = () => {
                         </DialogActions>
                     </>
                 )}
+            </Dialog>
+
+            {/* Dispute Confirmation Dialog */}
+            <Dialog open={showDisputeDialog} onClose={() => {}}>
+                <DialogTitle color="error" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <ErrorOutline /> Dispute Detected
+                </DialogTitle>
+                <DialogContent>
+                    <Typography>
+                        The AI has detected that a highly similar cow is already registered in the system. This indicates a potential dispute. Do you still want to continue and submit this registration for review?
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={async () => {
+                        if (disputeCowId) {
+                            try {
+                                await deleteCowAPI(disputeCowId);
+                            } catch(e) { console.error(e); }
+                        }
+                        setShowDisputeDialog(false);
+                        setPollingCowId(null);
+                        setIsSubmitting(false);
+                        alert('Registration cancelled.');
+                        navigate('/home');
+                    }} color="inherit">
+                        No, Cancel
+                    </Button>
+                    <Button onClick={() => {
+                        setShowDisputeDialog(false);
+                        setPollingCowId(null);
+                        setIsSubmitting(false);
+                        alert('Registered with a Dispute flag. An admin will review it.');
+                        navigate('/home');
+                    }} variant="contained" color="warning">
+                        Yes, Continue
+                    </Button>
+                </DialogActions>
             </Dialog>
 
             {/* FIXED TOP HEADER */}

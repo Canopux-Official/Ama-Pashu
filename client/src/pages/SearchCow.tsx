@@ -430,7 +430,7 @@ const ScanTab = () => {
                 faceImage: base64ToFile(faceImage, 'search_face.jpg'),
                 muzzleImage: base64ToFile(muzzleImage, 'search_muzzle.jpg')
             };
-            const response = await searchCowAPI(payloadForApi as unknown);
+            const response = await searchCowAPI(payloadForApi as any);
 
             if (response.success && response.data.cowId) {
                 setMatchedCow(response.data);

@@ -165,6 +165,25 @@ export const getMyCattle = async (req: Request, res: Response) => {
     }
 };
 
+// DELETE /api/cattle/:id -> Delete a cow belonging to the farmer
+export const deleteCow = async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    try {
+        if (!authReq.user) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+        const cowToDelete = await Cattle.findOne({ _id: authReq.params.id, farmerId: authReq.user.id });
+        if (!cowToDelete) return res.status(404).json({ success: false, message: 'Cow not found or unauthorized' });
+
+        await Cattle.findByIdAndDelete(authReq.params.id);
+        await User.findByIdAndUpdate(authReq.user.id, { $pull: { cows: authReq.params.id } });
+
+        res.status(200).json({ success: true, message: 'Cow deleted successfully' });
+    } catch (error: any) {
+        console.error('Error deleting cow:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
 // GET /api/cattle/:id -> Get a single cow by ID
 export const getCowProfile = async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
