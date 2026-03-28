@@ -24,6 +24,7 @@ interface CowProfileData {
     sireTag?: string;
     damTag?: string;
     currentStatus?: string;
+    isDispute?: boolean;
     lastWeight?: number;
     photos?: {
         faceProfile?: string;
@@ -193,7 +194,15 @@ const CowProfile: React.FC = () => {
                     {tabValue === 0 && (
                         <Box sx={{ p: 2 }}>
                             {/* STATUS BADGES */}
-                            <Stack direction="row" spacing={1} sx={{ mb: 3 }}>
+                            <Stack direction="row" spacing={1} sx={{ mb: 3, flexWrap: 'wrap', gap: 1 }}>
+                                {cowData?.isDispute && (
+                                    <Chip 
+                                        label="⚠️ DISPUTED OWNERSHIP" 
+                                        color="error" 
+                                        size="small" 
+                                        sx={{ fontWeight: 'bold', animation: 'pulse 1.5s infinite' }} 
+                                    />
+                                )}
                                 <Chip label={cowData?.currentStatus || 'Unknown'} color="success" size="small" icon={<WaterDrop />} />
                                 <Chip label={cowData?.healthStats?.growthStatus || 'Tracking'} variant="outlined" size="small" color="info" />
                             </Stack>

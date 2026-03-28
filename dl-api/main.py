@@ -38,6 +38,19 @@ LOCAL_UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 def download_oci_image(file_name: str) -> np.ndarray:
     """Helper to download image from OCI Object Storage into OpenCV format"""
+    if file_name.startswith("http://") or file_name.startswith("https://"):
+        try:
+            resp = requests.get(file_name, timeout=10)
+            resp.raise_for_status()
+            image_bytes = resp.content
+            np_arr = np.frombuffer(image_bytes, np.uint8)
+            img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            if img is None:
+                raise ValueError(f"Decoded image is None for URL: {file_name}")
+            return img
+        except Exception as e:
+            raise ValueError(f"Could not download or decode image from URL {file_name}: {e}")
+
     if IS_LOCAL_DEV:
         file_path = os.path.join(LOCAL_UPLOAD_DIR, file_name)
         img = cv2.imread(file_path, cv2.IMREAD_COLOR)
@@ -289,15 +302,13 @@ async def lifespan(app: FastAPI):
         spoof_path="models/best_model.pth"
     )
     
-    dsn = os.getenv("ORACLE_DSN", "localhost:1521/FREEPDB1")
-    user = os.getenv("ORACLE_USER", "sys")
-    print(f"Connecting to Oracle DB: {dsn} as {user}...")
+    qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+    qdrant_api_key = os.getenv("QDRANT_API_KEY", "")
+    print(f"Connecting to Qdrant at {qdrant_url}...")
     
-    # Needs Oracle 23ai valid credentials mapped to these ENV variables.
     db = CattleVectorStore(
-        dsn=dsn, 
-        user=user,
-        password=os.getenv("ORACLE_PASSWORD", "password")
+        qdrant_url=qdrant_url,
+        qdrant_api_key=qdrant_api_key
     )
     print("System Ready.")
     

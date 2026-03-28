@@ -12,10 +12,26 @@ if (IS_LOCAL_DEV && !fs.existsSync(LOCAL_UPLOAD_DIR)) {
     fs.mkdirSync(LOCAL_UPLOAD_DIR, { recursive: true });
 }
 
+import { v2 as cloudinary } from 'cloudinary';
+
 /**
  * Uploads a buffer directly to OCI Object Storage and returns the object name.
  */
 export const uploadImageToOCI = async (fileBuffer: Buffer, originalName: string, mimeType: string): Promise<string> => {
+    // Easily reversible Cloudinary fallback:
+    if (process.env.CLOUDINARY_URL) {
+        return new Promise((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+                { resource_type: 'image', format: originalName.split('.').pop() || 'jpg' },
+                (error, result) => {
+                    if (error) reject(error);
+                    else resolve(result!.secure_url);
+                }
+            );
+            uploadStream.end(fileBuffer);
+        });
+    }
+
     const fileExtension = originalName.split('.').pop() || 'jpg';
     const objectName = `${uuidv4()}.${fileExtension}`;
 
