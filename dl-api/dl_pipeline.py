@@ -113,4 +113,4 @@ class DLPipeline:
             spoof_prob = probs[0][1].item()
             print(f"Spoof probability: {spoof_prob}")
             
-        return spoof_prob > 0.3, spoof_prob
+        return spoof_prob > 0.2, spoof_prob

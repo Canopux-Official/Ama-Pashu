@@ -408,7 +408,7 @@ const ScanTab = () => {
     const [notFoundReason, setNotFoundReason] = useState('');
     const [matchedCow, setMatchedCow] = useState<{
         cowId: string;
-        cow: { name?: string; tagNumber?: string; photos?: { faceProfile?: string; muzzle?: string; } };
+        cow: { name?: string; tagNumber?: string; photos?: { faceProfile?: string; muzzle?: string; }; isDispute?: boolean };
         confidence: number
     } | null>(null);
 
@@ -543,8 +543,16 @@ const ScanTab = () => {
                             </Typography>
                             <Chip
                                 label={`Confidence: ${(matchedCow.confidence * 100).toFixed(1)}%`}
-                                color="success" size="small" sx={{ fontWeight: 'bold' }}
+                                color="success" size="small" sx={{ fontWeight: 'bold', mb: 1 }}
                             />
+                            {matchedCow.cow.isDispute && (
+                                <Chip
+                                    label="⚠️ Disputed Record"
+                                    color="error"
+                                    size="small"
+                                    sx={{ fontWeight: 'bold', px: 1 }}
+                                />
+                            )}
                         </Box>
                     )}
                 </DialogContent>

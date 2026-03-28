@@ -3,6 +3,7 @@ import { Box, Typography, Container, Card, CardContent, CircularProgress, Alert 
 import { useQuery } from '@tanstack/react-query';
 import { getMyCattleAPI } from '../apis/apis';
 import { WarningAmber } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 
 interface DisputedCow {
     _id: string;
@@ -16,6 +17,7 @@ interface DisputedCow {
 }
 
 const Disputes: React.FC = () => {
+    const navigate = useNavigate();
     const { data: cowsResponse, isLoading, isError } = useQuery({
         queryKey: ['cows'],
         queryFn: getMyCattleAPI,
@@ -63,7 +65,19 @@ const Disputes: React.FC = () => {
             ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {disputedCows.map((cow: DisputedCow) => (
-                        <Card key={cow._id} sx={{ display: 'flex', border: '1px solid', borderColor: 'error.light', borderRadius: 2 }}>
+                        <Card 
+                            key={cow._id} 
+                            onClick={() => navigate(`/profile/${cow._id}`)}
+                            sx={{ 
+                                display: 'flex', 
+                                border: '1px solid', 
+                                borderColor: 'error.light', 
+                                borderRadius: 2,
+                                cursor: 'pointer',
+                                transition: '0.2s',
+                                '&:hover': { bgcolor: '#fffafa' }
+                            }}
+                        >
                             {cow.photos?.faceProfile && (
                                 <Box
                                     component="img"
