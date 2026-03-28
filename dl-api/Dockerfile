@@ -23,11 +23,11 @@ COPY . /code
 
 # Ensure LFS model files are resolved (not just pointers)
 RUN if head -c 20 models/best.pt | grep -q "version https"; then \
-        echo "ERROR: models/best.pt is still a Git LFS pointer!" && exit 1; \
+    echo "ERROR: models/best.pt is still a Git LFS pointer!" && exit 1; \
     fi
 
-# Standard port for FastAPI is 8000 (OCI load balancers can map this)
-EXPOSE 8000
+# Hugging Face Spaces require port 7860
+EXPOSE 7860
 
-# Command to run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Command to run the application on port 7860
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
