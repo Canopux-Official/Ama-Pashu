@@ -1,0 +1,63 @@
+name: Build iOS App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build iOS (Capacitor)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: 'client/package-lock.json'
+
+      - name: Install Dependencies
+        working-directory: ./client
+        run: npm ci
+
+      - name: Build Web App
+        working-directory: ./client
+        run: npm run build
+
+      - name: Add iOS Platform (if missing)
+        working-directory: ./client
+        run: |
+          if [ ! -d "ios" ]; then
+            npm install @capacitor/ios
+            npx cap add ios --packagemanager CocoaPods
+          fi
+
+      - name: Sync Capacitor (iOS)
+        working-directory: ./client
+        run: npx cap sync ios
+
+      - name: Install CocoaPods dependencies
+        working-directory: ./client/ios/App
+        run: pod install
+
+      - name: Build iOS App (Simulator)
+        working-directory: ./client/ios/App
+        run: |
+          # Build using the CocoaPods workspace and save to build_output
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -derivedDataPath ./build_output \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Upload iOS App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ama-Pashu-iOS-Simulator-Build
+          path: ./client/ios/App/build_output/Build/Products/Release-iphonesimulator/App.app

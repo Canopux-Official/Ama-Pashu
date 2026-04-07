@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Mock OCI Cache / Queue using Redis locally
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # Express Backend (Server)
+  server:
+    build:
+      context: ./server
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - REDIS_URL=redis://redis:6379
+      # Will pull actual secure keys from a .env file locally for Oracle 23ai API for MongoDB
+      - DB_URI=${DB_URI:-mongodb://localhost:27017/ama-pashu} 
+    volumes:
+      - ./server/src:/usr/src/app/src
+    depends_on:
+      - redis
+    command: npm run dev
+
+  # FastAPI Backend (DL-API)
+  dl-api:
+    build:
+      context: ./dl-api
+    ports:
+      - "8000:8000"
+    environment:
+      - IS_LOCAL_DEV=true
+      - EXPRESS_WEBHOOK_URL=http://server:5000/api/cattle/webhook/dl-api-complete
+      # These simulate the exact same env vars we'd inject via OCI Vault securely
+      - ORACLE_DSN=${ORACLE_DSN:-localhost:1521/FREEPDB1}
+      - ORACLE_USER=${ORACLE_USER:-sys}
+      - ORACLE_PASSWORD=${ORACLE_PASSWORD:-password}
+    depends_on:
+      - server
+    volumes:
+      # Mount models folder dynamically in development if preferred
+      - ./dl-api/models:/code/models
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+volumes:
+  redis_data:
