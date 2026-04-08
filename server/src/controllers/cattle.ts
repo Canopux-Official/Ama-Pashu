@@ -268,8 +268,12 @@ export const searchCow = async (req: Request, res: Response) => {
                 muzzle_image_oci: muzzleOci
             });
 
-            // If success, we'll get cow_id from DL API
+            // Wait for the unified DL-API response
             const { cow_id, distance } = dlResponse.data;
+
+            if (!cow_id) {
+                return res.status(404).json({ success: false, message: 'Cow not found. No suspects passed the AI evaluation.' });
+            }
 
             // Optional: verify the cow exists and belongs to the farmer
             const cow = await Cattle.findOne({ _id: cow_id, farmerId: authReq.user.id });
@@ -301,7 +305,7 @@ export const searchCow = async (req: Request, res: Response) => {
 // POST /api/cattle/webhook/dl-api-complete -> Webhook for DL-API
 export const handleDlApiWebhook = async (req: Request, res: Response) => {
     try {
-        const { cow_id, farmer_id, status, matched_cow_id } = req.body;
+        const { cow_id, farmer_id, status, matched_cow_id, superpoint_cache } = req.body;
 
         if (!cow_id) {
             return res.status(400).json({ success: false, message: 'Missing cow_id' });
@@ -331,6 +335,7 @@ export const handleDlApiWebhook = async (req: Request, res: Response) => {
         } else if (status === 'SUCCESS') {
             cow.aiMetadata.isRegistered = true;
             cow.aiMetadata.status = status;
+
             await cow.save();
             console.log(`[Webhook] Successfully registered cow_id: ${cow_id}`);
         } else {

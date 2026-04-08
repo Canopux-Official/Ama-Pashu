@@ -41,6 +41,7 @@ export interface ICattle extends Document {
         confidenceScore?: number;
         lastScannedAt?: Date;
     };
+    superpointCache?: any;
 
     // Health Status
     currentStatus: 'Milking' | 'Dry' | 'Pregnant' | 'Heifer' | 'Calf';
@@ -95,6 +96,7 @@ const CattleSchema = new Schema<ICattle>({
         confidenceScore: Number,
         lastScannedAt: Date
     },
+    superpointCache: { type: Schema.Types.Mixed },
 
     currentStatus: {
         type: String,
