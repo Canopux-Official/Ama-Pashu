@@ -428,7 +428,7 @@ const StepKYC: React.FC<StepProps> = ({ formData, handlePhotoCapture }) => (
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2 }}>
             <SmartPhotoBox
                 label="Farmer Selfie with Cow"
-                required={true}
+                required={false}
                 guidanceType="selfie"
                 currentImage={formData.selfieImage}
                 onCapture={(img) => handlePhotoCapture?.('selfieImage', img)}

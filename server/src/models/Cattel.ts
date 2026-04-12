@@ -33,7 +33,7 @@ export interface ICattle extends Document {
         rightProfile: string;
         backView: string;
         tailView: string;
-        selfie: string;
+        selfie?: string;
     };
     aiMetadata: {
         isRegistered: boolean;
@@ -87,7 +87,7 @@ const CattleSchema = new Schema<ICattle>({
         rightProfile: { type: String },
         backView: { type: String },
         tailView: { type: String },
-        selfie: { type: String, required: true }
+        selfie: { type: String }
     },
 
     aiMetadata: {

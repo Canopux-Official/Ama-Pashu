@@ -42,10 +42,6 @@ export const registerCow = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: 'Missing required biometrics. Both a Face Profile and a Muzzle capture are strictly required.' });
         }
         
-        if (!files?.selfieImage?.[0]) {
-            return res.status(400).json({ success: false, message: 'Missing farmer selfie. Required for KYC.' });
-        }
-
         // Check duplicate tags if tag is provided
         if (tagNo && tagNo.trim() !== '') {
             const existingCow = await Cattle.findOne({ tagNumber: tagNo });
