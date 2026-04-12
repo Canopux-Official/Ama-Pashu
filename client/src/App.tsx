@@ -38,19 +38,25 @@ const LocationGuard = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const checkLocation = async () => {
       try {
-        let perm = await Geolocation.checkPermissions();
-        if (perm.location !== 'granted') {
-          perm = await Geolocation.requestPermissions();
-        }
-        if (perm.location !== 'granted') {
-          setHasLocation(false);
-          return;
-        }
-        // Fetch to ensure GPS is physically ON
-        await Geolocation.getCurrentPosition({ timeout: 5000, maximumAge: 60000 });
+        // Try getting position directly. On the web this triggers the browser's permission prompt automatically.
+        await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
         setHasLocation(true);
       } catch (err) {
-        console.error("Location error", err);
+        console.error("Initial location fetch failed, attempting explicit permission request", err);
+        // Fallback for native platforms where explicit permission requests may be required
+        try {
+          let perm = await Geolocation.checkPermissions();
+          if (perm.location !== 'granted') {
+            perm = await Geolocation.requestPermissions();
+          }
+          if (perm.location === 'granted') {
+            await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+            setHasLocation(true);
+            return;
+          }
+        } catch (permErr) {
+          console.error("Permission check/request error", permErr);
+        }
         setHasLocation(false);
       }
     };
@@ -67,7 +73,7 @@ const LocationGuard = ({ children }: { children: React.ReactNode }) => {
         <ErrorOutline color="error" sx={{ fontSize: 64, mb: 2 }} />
         <Typography variant="h5" fontWeight="bold" gutterBottom>Location Required</Typography>
         <Typography variant="body1" color="text.secondary" mb={4}>
-          Ama Pashu requires your GPS location to be turned on to verify livestock registration areas. Please enable your Location Services and location permissions to continue using the app.
+          Ama Gau-Dhana requires your GPS location to be turned on to verify livestock registration areas. Please enable your Location Services and location permissions to continue using the app.
         </Typography>
         <Button variant="contained" onClick={() => window.location.reload()}>Retry</Button>
       </Box>
@@ -216,7 +222,7 @@ const App: React.FC = () => {
                 py: 4,
               }}
             >
-              {/* Ama Pashu Logo */}
+              {/* Ama Gau-Dhana Logo */}
               <motion.div
                 animate={{ y: [0, -5, 0] }}
                 transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
@@ -230,7 +236,7 @@ const App: React.FC = () => {
                     mb: 2,
                   }}
                 >
-                  <Box component="img" src="/logo.png" alt="Ama Pashu"
+                  <Box component="img" src="/logo.png" alt="Ama Gau-Dhana"
                     sx={{ width: 56, height: 56, objectFit: 'contain', borderRadius: '10px' }} />
                 </Box>
               </motion.div>
@@ -238,7 +244,7 @@ const App: React.FC = () => {
               {/* Brand name */}
               <Typography variant="h4" sx={{ color: 'text.primary', lineHeight: 1 }}>
                 Ama{' '}
-                <Box component="span" sx={{ color: 'primary.main' }}>Pashu</Box>
+                <Box component="span" sx={{ color: 'primary.main' }}>Gau-Dhana</Box>
               </Typography>
 
               {/* Govt badge */}

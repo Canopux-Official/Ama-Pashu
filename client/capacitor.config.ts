@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.ocac.mopashu',
-  appName: 'Ama Pashu',
+  appId: 'com.ocac.amagaudhana',
+  appName: 'Ama Gau-Dhana',
   webDir: 'dist',
   // server: {
   //   url: 'http://localhost:5173',

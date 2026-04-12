@@ -167,7 +167,7 @@ const UserProfile: React.FC = () => {
         // Remove only auth-related prefs to preserve onboarding state
         await Preferences.remove({ key: 'jwt_token' });
         await Preferences.remove({ key: 'user_data' });
-        
+
         // Clear React Query cache so data doesn't bleed into next login
         queryClient.clear();
 
@@ -402,7 +402,7 @@ const UserProfile: React.FC = () => {
                 )}
 
                 <Typography variant="caption" display="block" textAlign="center" color="text.disabled" sx={{ mt: 4 }}>
-                    Ama Pashu © 2026 Odisha Govt.
+                    Ama Gau-Dhana © 2026 Odisha Govt.
                 </Typography>
 
                 {/* Logout Confirmation Dialog */}

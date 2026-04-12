@@ -21,5 +21,5 @@ export const queueClient = provider ? new oci.queue.QueueClient({
 }) : null as any;
 
 export const OCI_NAMESPACE = process.env.OCI_NAMESPACE || 'your-namespace';
-export const OCI_BUCKET_NAME = process.env.OCI_BUCKET_NAME || 'ama-pashu-images';
+export const OCI_BUCKET_NAME = process.env.OCI_BUCKET_NAME || 'ama-gau-dhana-images';
 export const OCI_QUEUE_ID = process.env.OCI_QUEUE_ID || 'ocid1.queue.oc1...';

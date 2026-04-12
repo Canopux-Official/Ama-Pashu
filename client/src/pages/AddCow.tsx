@@ -536,7 +536,7 @@ const StepReview: React.FC<StepReviewProps> = ({ formData, setActiveStep }) => (
 
         <Box sx={{ textAlign: 'center', mt: 2 }}>
             <Typography variant="caption" color="text.secondary">
-                By clicking submit, this data and the metadata will be uploaded to the Ama Pashu AI Server.
+                By clicking submit, this data and the metadata will be uploaded to the Ama Gau-Dhana AI Server.
             </Typography>
         </Box>
     </Stack>

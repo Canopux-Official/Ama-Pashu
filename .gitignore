@@ -58,3 +58,4 @@ wipe_db.py
 wipe_db.ts
 uploads
 dl-api/
+data/

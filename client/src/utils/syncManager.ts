@@ -5,7 +5,7 @@ import { queryClient } from '../queryClient';
 import { base64ToFile } from './imageUtils';
 // Initialize stores
 export const pendingCowsStore = localforage.createInstance({
-    name: 'AmaPashu',
+    name: 'AmaGauDhana',
     storeName: 'pendingCows'
 });
 
@@ -111,7 +111,7 @@ export const syncManager = {
                     // Determine if it was a validation/AI rejection or a network failure
                     const isValidationError = err.responseStatus && err.responseStatus >= 400 && err.responseStatus < 500;
                     const isAiError = err.message && err.message.includes('Registration failed') || err.message === 'Timeout waiting for AI verification.';
-                    
+
                     if (isValidationError || isAiError) {
                         try {
                             const newRetryCount = (cow.retryCount || 0) + 1;
